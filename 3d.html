@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>3D金ころがし（まわり将棋）オールスターズ</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -19,14 +19,18 @@
     * {
       user-select: none;
       -webkit-user-select: none;
+      -webkit-touch-callout: none;
+      -webkit-tap-highlight-color: transparent;
       box-sizing: border-box;
     }
     body, html {
       margin: 0;
       padding: 0;
       width: 100%;
-      height: 100%;
+      height: 100vh;
+      height: 100dvh;
       overflow: hidden;
+      overscroll-behavior: none;
       background-color: #14110e;
       font-family: 'M PLUS Rounded 1c', sans-serif;
     }
@@ -49,6 +53,79 @@
       display: flex;
       flex-direction: column;
       justify-content: space-between;
+      padding-top: max(0.375rem, env(safe-area-inset-top));
+      padding-bottom: max(0.375rem, env(safe-area-inset-bottom));
+      padding-left: max(0.5rem, env(safe-area-inset-left));
+      padding-right: max(0.5rem, env(safe-area-inset-right));
+    }
+    @media (min-width: 1024px) and (min-height: 580px) {
+      #ui-layer {
+        padding-top: max(0.75rem, env(safe-area-inset-top));
+        padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+        padding-left: max(1rem, env(safe-area-inset-left));
+        padding-right: max(1rem, env(safe-area-inset-right));
+      }
+    }
+    /* Responsive Desktop vs Mobile/Compact-Landscape visibility */
+    .hidden {
+      display: none !important;
+    }
+    .desktop-ui:not(.hidden) {
+      display: none !important;
+    }
+    .compact-ui:not(.hidden) {
+      display: flex !important;
+    }
+    .compact-block:not(.hidden) {
+      display: block !important;
+    }
+    @media (min-width: 1024px) and (min-height: 580px) {
+      .desktop-ui:not(.hidden) {
+        display: flex !important;
+      }
+      .compact-ui,
+      .compact-ui:not(.hidden),
+      .compact-block,
+      .compact-block:not(.hidden) {
+        display: none !important;
+      }
+    }
+    /* Ultra-short landscape tweaks (e.g. phone landscape height <= 480px) */
+    @media (max-height: 480px) {
+      .hide-short-landscape {
+        display: none !important;
+      }
+      #ui-layer {
+        padding-top: max(0.25rem, env(safe-area-inset-top));
+        padding-bottom: max(0.25rem, env(safe-area-inset-bottom));
+      }
+      #top-header-bar {
+        padding-top: 0.25rem !important;
+        padding-bottom: 0.25rem !important;
+      }
+      #throw-panel {
+        padding: 0.35rem 0.6rem !important;
+        max-width: 48rem !important;
+      }
+      #throw-panel-inner {
+        flex-direction: row !important;
+        gap: 0.5rem !important;
+      }
+      #turn-header-row {
+        width: auto !important;
+        flex-shrink: 0;
+      }
+      #human-buttons {
+        width: auto !important;
+        flex: 1 1 auto;
+      }
+      #human-buttons button {
+        padding-top: 0.35rem !important;
+        padding-bottom: 0.35rem !important;
+      }
+      #speech-banner {
+        padding: 0.3rem 0.65rem !important;
+      }
     }
     .interactive {
       pointer-events: auto;
@@ -104,40 +181,52 @@
   <svg id="swipe-svg" class="absolute inset-0 w-full h-full pointer-events-none z-[8] hidden">
     <defs>
       <linearGradient id="arrowGrad" x1="0%" y1="100%" x2="0%" y2="0%">
-        <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.3" />
+        <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.35" />
         <stop offset="100%" stop-color="#ef4444" stop-opacity="0.95" />
       </linearGradient>
     </defs>
     <line id="swipe-line" x1="0" y1="0" x2="0" y2="0" stroke="url(#arrowGrad)" stroke-width="8" stroke-linecap="round" stroke-dasharray="10,6" />
-    <circle id="swipe-start" cx="0" cy="0" r="16" fill="rgba(245, 158, 11, 0.4)" stroke="#f59e0b" stroke-width="3" />
+    <circle id="swipe-start" cx="0" cy="0" r="18" fill="rgba(245, 158, 11, 0.28)" stroke="#f59e0b" stroke-width="3" />
     <circle id="swipe-end" cx="0" cy="0" r="12" fill="#ef4444" stroke="#fff" stroke-width="3" />
+    <g id="swipe-badge-group" transform="translate(0,0)">
+      <rect id="swipe-badge-bg" x="-52" y="-38" width="104" height="24" rx="12" fill="rgba(20,17,14,0.9)" stroke="#fbbf24" stroke-width="1.5" />
+      <text id="swipe-badge-text" x="0" y="-22" text-anchor="middle" fill="#fef3c7" font-size="11" font-weight="900">強さ 100%</text>
+    </g>
   </svg>
 
-  <!-- Main UI Overlay -->
-  <div id="ui-layer" class="p-2 sm:p-4">
+  <!-- Hidden file input for custom BGM audio file -->
+  <input type="file" id="custom-bgm-input" accept="audio/*" class="hidden" onchange="handleCustomBgmFile(this)" />
 
-    <!-- TOP BAR: Title, Player Cards, & Quick Settings -->
-    <div class="flex flex-col gap-2">
-      <div class="flex flex-wrap items-center justify-between gap-2 bg-stone-900/85 backdrop-blur-md border border-amber-700/50 rounded-2xl px-3 py-2 shadow-xl interactive">
+  <!-- Main UI Overlay -->
+  <div id="ui-layer">
+
+    <!-- TOP BAR: Title, Quick Controls, Player Cards & Speech Cut-in -->
+    <div class="flex flex-col gap-1.5 relative">
+      <div id="top-header-bar" class="flex items-center justify-between gap-1.5 bg-stone-900/88 backdrop-blur-md border border-amber-700/50 rounded-2xl px-2.5 py-1.5 lg:px-3 lg:py-1.5 shadow-xl interactive">
         <!-- Brand / Title -->
-        <div class="flex items-center gap-2.5">
-          <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 via-yellow-500 to-amber-700 flex items-center justify-center shadow-md border border-amber-200 text-stone-950 font-black text-xl serif-jp">
+        <div class="flex items-center gap-2 min-w-0">
+          <div class="w-8 h-8 lg:w-10 lg:h-10 rounded-xl bg-gradient-to-br from-amber-400 via-yellow-500 to-amber-700 flex items-center justify-center shadow-md border border-amber-200 text-stone-950 font-black text-base lg:text-xl serif-jp shrink-0">
             金
           </div>
-          <div>
-            <h1 class="text-sm sm:text-base font-black tracking-tight text-amber-300 flex items-center gap-2">
-              <span>3D金ころがし</span>
-              <span class="text-[10px] sm:text-xs bg-amber-600/40 border border-amber-400/50 text-amber-200 px-2 py-0.5 rounded-full">まわり将棋</span>
+          <div class="min-w-0">
+            <h1 class="text-xs sm:text-sm lg:text-base font-black tracking-tight text-amber-300 flex items-center gap-1.5 truncate">
+              <span class="truncate">3D金ころがし</span>
+              <span class="hidden sm:inline-block text-[10px] lg:text-xs bg-amber-600/40 border border-amber-400/50 text-amber-200 px-1.5 py-0.5 rounded-full shrink-0">まわり将棋</span>
             </h1>
-            <p class="text-[11px] text-stone-400 hidden sm:block">4枚の金将を振って外周を進め！歩兵から王将へ昇格バトル</p>
+            <p class="text-[11px] text-stone-400 desktop-ui">4枚の金将を振って外周を進め！歩兵から王将へ昇格バトル</p>
           </div>
+          <!-- Mobile Active Recording Indicator Pill (shown only while recording on mobile) -->
+          <button onclick="stopRecording()" id="mobile-rec-indicator" class="hidden bg-red-600 border border-yellow-300 text-white px-2 py-1 rounded-full text-[10px] font-black items-center gap-1 animate-pulse shrink-0">
+            <span class="w-2 h-2 rounded-sm bg-yellow-300 inline-block"></span>
+            <span id="mobile-rec-time">00:00</span>
+          </button>
         </div>
 
-        <!-- Top Controls -->
-        <div class="flex flex-wrap items-center gap-1.5 sm:gap-2">
+        <!-- DESKTOP FULL CONTROLS (lg & height >= 580px) -->
+        <div class="desktop-ui flex-wrap items-center gap-1.5">
           <!-- Standing Assist Mode Selector -->
           <div class="flex items-center bg-stone-800/90 border border-stone-700 rounded-xl p-1 text-xs">
-            <span class="px-2 text-stone-400 hidden md:inline"><i class="fa-solid fa-wand-magic-sparkles text-amber-400 mr-1"></i>立ちやすさ:</span>
+            <span class="px-1.5 text-stone-400"><i class="fa-solid fa-wand-magic-sparkles text-amber-400 mr-1"></i>立ちやすさ:</span>
             <button onclick="setAssistMode('real')" id="assist-real" class="px-2 py-1 rounded-lg font-bold transition text-stone-400 hover:text-white">リアル</button>
             <button onclick="setAssistMode('entame')" id="assist-entame" class="px-2 py-1 rounded-lg font-bold transition bg-amber-600 text-white shadow">エンタメ</button>
             <button onclick="setAssistMode('chaos')" id="assist-chaos" class="px-2 py-1 rounded-lg font-bold transition text-stone-400 hover:text-white">カオス</button>
@@ -155,10 +244,21 @@
             <span id="speed-label">1.0x</span>
           </button>
 
+          <!-- BGM Toggle + Track Cycle Group -->
+          <div class="flex items-center bg-stone-800/90 border border-emerald-500/40 rounded-xl p-0.5">
+            <button onclick="toggleBgmButton()" id="btn-bgm" class="bg-emerald-700/85 hover:bg-emerald-600 text-white px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition shadow" title="BGM ON/OFF">
+              <i id="bgm-icon" class="fa-solid fa-music"></i>
+              <span id="bgm-label">BGM: 陽だまり茶屋</span>
+            </button>
+            <button onclick="cycleBgmTrack()" class="text-amber-300 hover:text-white px-2 py-1 text-xs font-bold transition" title="BGMの曲を切り替え">
+              <i class="fa-solid fa-forward-step"></i>
+            </button>
+          </div>
+
           <!-- Voice Toggle -->
           <button onclick="toggleVoice()" id="btn-voice" class="bg-amber-700/80 hover:bg-amber-600 border border-amber-400/60 text-white px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition shadow">
             <i id="voice-icon" class="fa-solid fa-volume-high"></i>
-            <span id="voice-label" class="hidden sm:inline">声 ON</span>
+            <span id="voice-label">声 ON</span>
           </button>
 
           <!-- Instant Record Toggle Button -->
@@ -177,7 +277,7 @@
           <!-- Rules & Player Config Modal Button -->
           <button onclick="openConfigModal()" class="bg-stone-800 hover:bg-stone-700 border border-amber-500/50 text-amber-300 px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition shadow">
             <i class="fa-solid fa-sliders"></i>
-            <span class="hidden md:inline">キャラ＆ルール設定</span>
+            <span>設定</span>
           </button>
 
           <!-- Reset Match -->
@@ -185,94 +285,195 @@
             <i class="fa-solid fa-rotate-right"></i>
           </button>
         </div>
+
+        <!-- MOBILE / COMPACT QUICK CONTROLS (1-row touch friendly icons) -->
+        <div class="compact-ui items-center gap-1 shrink-0">
+          <button onclick="cycleCameraMode()" class="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-stone-800 active:bg-stone-700 border border-stone-600 text-amber-300 flex items-center justify-center text-xs shadow" title="カメラ切替">
+            <i class="fa-solid fa-video"></i>
+          </button>
+          <button onclick="cycleGameSpeed()" class="h-7 sm:h-8 px-1.5 sm:px-2 rounded-xl bg-stone-800 active:bg-stone-700 border border-stone-600 text-amber-200 flex items-center justify-center text-[10px] sm:text-[11px] font-black shadow" title="速度切替">
+            <span id="mobile-speed-label">1.0x</span>
+          </button>
+          <button onclick="toggleBgmButton()" id="mobile-btn-bgm" class="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-emerald-700/85 border border-emerald-400/60 text-white flex items-center justify-center text-xs shadow" title="BGM ON/OFF">
+            <i id="mobile-bgm-icon" class="fa-solid fa-music"></i>
+          </button>
+          <button onclick="toggleVoice()" id="mobile-btn-voice" class="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-amber-700/85 border border-amber-400/60 text-white flex items-center justify-center text-xs shadow" title="ボイス ON/OFF">
+            <i id="mobile-voice-icon" class="fa-solid fa-volume-high"></i>
+          </button>
+          <button onclick="openConfigModal()" class="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-stone-800 active:bg-stone-700 border border-amber-500/50 text-amber-300 flex items-center justify-center text-xs shadow" title="キャラ＆ルール設定">
+            <i class="fa-solid fa-sliders"></i>
+          </button>
+          <button onclick="toggleMobileMenu()" id="btn-mobile-menu" class="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-amber-600/30 border border-amber-400/60 text-amber-200 flex items-center justify-center text-xs sm:text-sm shadow" title="メニュー（BGM選曲・立ちやすさ・録画・出目表）">
+            <i id="mobile-menu-icon" class="fa-solid fa-bars"></i>
+          </button>
+        </div>
       </div>
 
-      <!-- 4 PLAYER STATUS CARDS -->
-      <div id="player-cards-bar" class="grid grid-cols-2 lg:grid-cols-4 gap-2 interactive">
+      <!-- MOBILE QUICK MENU POPOVER DRAWER -->
+      <div id="mobile-menu-drawer" class="hidden bg-stone-900/95 backdrop-blur-lg border-2 border-amber-500/70 rounded-2xl p-3 shadow-2xl interactive space-y-2.5 animate-pop z-30">
+        <!-- BGM Selector & Volume -->
+        <div class="bg-stone-950/80 border border-stone-800 rounded-xl p-2.5 space-y-2">
+          <div class="flex items-center justify-between gap-2">
+            <span class="text-xs font-black text-emerald-300"><i class="fa-solid fa-music mr-1"></i>BGM選曲・音量</span>
+            <button onclick="document.getElementById('custom-bgm-input').click()" class="text-[10px] bg-stone-800 hover:bg-stone-700 border border-stone-600 text-amber-200 px-2 py-0.5 rounded-lg font-bold">
+              <i class="fa-solid fa-folder-open mr-1"></i>手持ちMP3読込
+            </button>
+          </div>
+          <div class="grid grid-cols-4 gap-1 text-[11px]">
+            <button onclick="selectBgmTrack(0)" id="m-bgm-0" class="py-1.5 px-1 rounded-lg font-bold bg-emerald-600 text-white truncate">🌸茶屋</button>
+            <button onclick="selectBgmTrack(1)" id="m-bgm-1" class="py-1.5 px-1 rounded-lg font-bold bg-stone-800 text-stone-300 truncate">🏮祭囃子</button>
+            <button onclick="selectBgmTrack(2)" id="m-bgm-2" class="py-1.5 px-1 rounded-lg font-bold bg-stone-800 text-stone-300 truncate">🌙真剣勝負</button>
+            <button onclick="setBgmEnabled(false)" id="m-bgm-off" class="py-1.5 px-1 rounded-lg font-bold bg-stone-800 text-stone-400 truncate">🔇OFF</button>
+          </div>
+          <div class="flex items-center gap-2 text-[11px] text-stone-300">
+            <i class="fa-solid fa-volume-low text-stone-400"></i>
+            <input type="range" id="bgm-volume-slider" min="0" max="100" value="40" oninput="setBgmVolume(this.value / 100)" class="flex-1 accent-emerald-500 h-1.5" />
+            <span id="bgm-vol-label" class="w-8 text-right font-bold text-emerald-300">40%</span>
+          </div>
+        </div>
+
+        <!-- Assist Mode Row -->
+        <div class="flex items-center justify-between gap-2 bg-stone-950/80 border border-stone-800 rounded-xl p-2 text-xs">
+          <span class="font-bold text-amber-300 shrink-0"><i class="fa-solid fa-wand-magic-sparkles mr-1"></i>立ちやすさ</span>
+          <div class="grid grid-cols-3 gap-1 flex-1 max-w-[210px]">
+            <button onclick="setAssistMode('real')" id="m-assist-real" class="py-1 rounded-lg font-bold text-[11px] text-stone-400 bg-stone-800">リアル</button>
+            <button onclick="setAssistMode('entame')" id="m-assist-entame" class="py-1 rounded-lg font-bold text-[11px] text-white bg-amber-600 shadow">エンタメ</button>
+            <button onclick="setAssistMode('chaos')" id="m-assist-chaos" class="py-1 rounded-lg font-bold text-[11px] text-stone-400 bg-stone-800">カオス</button>
+          </div>
+        </div>
+
+        <!-- Camera, Record, Studio, Reset Row -->
+        <div class="grid grid-cols-2 gap-1.5 text-xs">
+          <button onclick="toggleRecording(); toggleMobileMenu(false);" id="m-btn-record" class="bg-gradient-to-r from-red-600 to-rose-700 text-white py-2 px-3 rounded-xl font-black flex items-center justify-center gap-1.5 shadow">
+            <i class="fa-solid fa-circle text-[10px]"></i>
+            <span id="m-rec-btn-text">録画開始</span>
+          </button>
+          <button onclick="openRecordModal(); toggleMobileMenu(false);" class="bg-stone-800 border border-rose-500/50 text-rose-200 py-2 px-3 rounded-xl font-bold flex items-center justify-center gap-1.5">
+            <i class="fa-solid fa-clapperboard text-rose-400"></i>
+            <span>録画スタジオ</span>
+            <span id="m-clip-count-badge" class="bg-rose-600 text-white text-[10px] px-1.5 rounded-full font-black">0</span>
+          </button>
+          <button onclick="resetViewCamera(); toggleMobileMenu(false);" class="bg-stone-800 border border-stone-700 text-amber-200 py-2 px-3 rounded-xl font-bold flex items-center justify-center gap-1.5">
+            <i class="fa-solid fa-compass text-amber-400"></i>
+            <span>カメラ位置リセット</span>
+          </button>
+          <button onclick="resetMatch(); toggleMobileMenu(false);" class="bg-red-950/80 border border-red-500/40 text-red-200 py-2 px-3 rounded-xl font-bold flex items-center justify-center gap-1.5">
+            <i class="fa-solid fa-rotate-right"></i>
+            <span>対局やり直し</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 4 PLAYER STATUS CARDS (4 compact cols on mobile, 4 rich cards on desktop) -->
+      <div id="player-cards-bar" class="grid grid-cols-4 gap-1 sm:gap-1.5 lg:gap-2 interactive">
         <!-- Dynamically rendered via JS -->
       </div>
-    </div>
 
-    <!-- CENTER OVERLAY: Speech Bubble Banner & Roll Result Banner -->
-    <div class="flex flex-col items-center justify-center my-auto pointer-events-none gap-3 px-2">
-      <!-- Character Speech Bubble -->
-      <div id="speech-banner" class="hidden max-w-xl w-full bg-stone-950/90 backdrop-blur-md border-2 border-amber-500 rounded-2xl p-3 sm:p-4 shadow-2xl animate-pop">
-        <div class="flex items-center gap-3">
-          <div id="speech-avatar" class="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center text-2xl sm:text-3xl shadow-inner shrink-0 border border-white/20">
+      <!-- Character Speech Bubble (Top-docked slim toast so it NEVER blocks the center Shogi board!) -->
+      <div id="speech-banner" class="hidden self-center max-w-xl w-full bg-stone-950/88 backdrop-blur-md border border-amber-500/90 rounded-2xl px-2.5 py-1.5 sm:px-3.5 sm:py-2.5 shadow-xl animate-pop pointer-events-none">
+        <div class="flex items-center gap-2.5">
+          <div id="speech-avatar" class="w-8 h-8 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center text-lg sm:text-2xl shadow-inner shrink-0 border border-white/20">
             ⚾
           </div>
           <div class="flex-1 min-w-0">
-            <div class="flex items-center gap-2 mb-0.5">
-              <span id="speech-name" class="font-black text-xs sm:text-sm px-2 py-0.5 rounded-full bg-amber-500 text-stone-950">おんJ民</span>
-              <span id="speech-sub" class="text-[11px] text-amber-300/80 font-bold">P1 (南角スタート)</span>
+            <div class="flex items-center gap-1.5 mb-0.5">
+              <span id="speech-name" class="font-black text-[10px] sm:text-xs px-2 py-0.2 rounded-full bg-amber-500 text-stone-950">おんJ民</span>
+              <span id="speech-sub" class="text-[10px] text-amber-300/80 font-bold truncate">P1 (南角スタート)</span>
             </div>
-            <p id="speech-text" class="text-white font-extrabold text-sm sm:text-lg leading-snug break-words">
+            <p id="speech-text" class="text-white font-extrabold text-xs sm:text-base leading-snug truncate sm:whitespace-normal">
               「ワイのターンやな！いくでホンマ！」
             </p>
           </div>
         </div>
       </div>
+    </div>
 
+    <!-- CENTER OVERLAY: Roll Result Pop-up (appears briefly after roll) -->
+    <div class="flex flex-col items-center justify-center my-auto pointer-events-none px-2">
       <!-- Dice / Gold Roll Result Pop-up -->
-      <div id="result-banner" class="hidden bg-gradient-to-b from-stone-900/95 to-stone-950/95 backdrop-blur-md border-2 border-yellow-400 rounded-3xl px-6 py-4 text-center shadow-[0_0_40px_rgba(245,158,11,0.5)] animate-pop">
-        <div id="result-badge" class="inline-block text-xs font-black tracking-widest uppercase px-3 py-0.5 rounded-full bg-yellow-500 text-stone-950 mb-1">
+      <div id="result-banner" class="hidden bg-gradient-to-b from-stone-900/95 to-stone-950/95 backdrop-blur-md border-2 border-yellow-400 rounded-3xl px-4 py-3 sm:px-6 sm:py-4 text-center shadow-[0_0_40px_rgba(245,158,11,0.5)] animate-pop max-w-sm sm:max-w-lg">
+        <div id="result-badge" class="inline-block text-[11px] sm:text-xs font-black tracking-widest uppercase px-2.5 py-0.5 rounded-full bg-yellow-500 text-stone-950 mb-1">
           出目確定
         </div>
-        <div id="result-title" class="text-3xl sm:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-200 via-amber-400 to-yellow-200 serif-jp drop-shadow">
+        <div id="result-title" class="text-2xl sm:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-200 via-amber-400 to-yellow-200 serif-jp drop-shadow">
           8 マス進む！
         </div>
-        <div id="result-breakdown" class="flex flex-wrap items-center justify-center gap-1.5 mt-2 text-xs sm:text-sm font-bold text-amber-200">
+        <div id="result-breakdown" class="flex flex-wrap items-center justify-center gap-1 sm:gap-1.5 mt-1.5 text-[11px] sm:text-sm font-bold text-amber-200">
           <!-- Piece breakdown pills -->
         </div>
       </div>
     </div>
 
     <!-- BOTTOM BAR: Human Throw Controls & Quick Guide -->
-    <div class="flex flex-col items-center gap-2">
+    <div class="flex flex-col items-center gap-1.5">
+
+      <!-- Toggleable Mobile Scoring Legend Popover -->
+      <div id="mobile-legend-popover" class="hidden compact-block w-full max-w-md bg-stone-950/95 backdrop-blur-md border border-amber-500/60 rounded-2xl px-3 py-2 text-[11px] text-stone-200 shadow-2xl interactive animate-pop">
+        <div class="flex items-center justify-between mb-1">
+          <span class="font-black text-amber-400"><i class="fa-solid fa-book-open mr-1"></i>金ころがし 出目表</span>
+          <button onclick="toggleLegendPopover(false)" class="text-stone-400 hover:text-white px-1"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="flex flex-wrap gap-x-2.5 gap-y-1 text-[11px]">
+          <span>表=<strong class="text-white">1点</strong></span>
+          <span>裏=<strong class="text-stone-400">0点</strong>(4枚全裏=<strong class="text-yellow-400">8点!</strong>)</span>
+          <span>横立ち=<strong class="text-pink-400">5点</strong></span>
+          <span>縦立ち=<strong class="text-cyan-400">10点</strong></span>
+          <span>逆立ち=<strong class="text-purple-400">20点!</strong></span>
+          <span>盤外=<strong class="text-red-400">0点</strong></span>
+          <span>重なり=<strong class="text-orange-400">0点</strong></span>
+        </div>
+      </div>
 
       <!-- Active Turn Control Panel -->
-      <div id="throw-panel" class="w-full max-w-2xl bg-stone-900/90 backdrop-blur-md border border-amber-500/60 rounded-2xl p-3 sm:p-4 shadow-2xl interactive transition-all">
-        <div class="flex flex-col sm:flex-row items-center justify-between gap-3">
+      <div id="throw-panel" class="w-full max-w-2xl lg:max-w-3xl bg-stone-900/90 backdrop-blur-md border border-amber-500/60 rounded-2xl px-2.5 py-2 sm:p-3 shadow-2xl interactive transition-all">
+        <div id="throw-panel-inner" class="flex flex-col lg:flex-row items-center justify-between gap-2 lg:gap-3">
           <!-- Turn Indicator & Instruction -->
-          <div class="flex items-center gap-3 text-left w-full sm:w-auto">
-            <div id="turn-icon" class="w-11 h-11 rounded-xl bg-amber-500 text-stone-950 flex items-center justify-center text-2xl font-black shrink-0 shadow">
-              ⚾
-            </div>
-            <div>
-              <div class="flex items-center gap-2">
-                <span id="turn-player-label" class="font-black text-amber-300 text-sm sm:text-base">P1: おんJ民 の番</span>
-                <span id="turn-piece-badge" class="text-xs px-2 py-0.5 rounded bg-stone-800 border border-amber-500/40 text-amber-200 font-bold serif-jp">現在：歩兵</span>
+          <div id="turn-header-row" class="flex items-center justify-between gap-2 text-left w-full lg:w-auto min-w-0">
+            <div class="flex items-center gap-2 min-w-0">
+              <div id="turn-icon" class="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-amber-500 text-stone-950 flex items-center justify-center text-lg sm:text-2xl font-black shrink-0 shadow">
+                ⚾
               </div>
-              <p id="turn-instruction" class="text-xs text-stone-300 mt-0.5">
-                <i class="fa-solid fa-hand-pointer text-amber-400 mr-1"></i>盤面を上にスワイプして投げるか、下の投擲ボタンを押してください
-              </p>
+              <div class="min-w-0">
+                <div class="flex items-center gap-1.5 flex-wrap">
+                  <span id="turn-player-label" class="font-black text-amber-300 text-xs sm:text-base truncate">P1: おんJ民 の番</span>
+                  <span id="turn-piece-badge" class="text-[10px] sm:text-xs px-1.5 py-0.2 rounded bg-stone-800 border border-amber-500/40 text-amber-200 font-bold serif-jp shrink-0">歩兵</span>
+                </div>
+                <p id="turn-instruction" class="text-[11px] sm:text-xs text-stone-300 truncate hide-short-landscape">
+                  <i class="fa-solid fa-hand-pointer text-amber-400 mr-1"></i>盤面をスワイプ、またはボタンで投擲
+                </p>
+              </div>
             </div>
+            <!-- Compact Legend Toggle Button (Mobile / Compact screens) -->
+            <button onclick="toggleLegendPopover()" class="compact-ui shrink-0 bg-stone-800 hover:bg-stone-700 border border-stone-600 text-amber-300 px-2 py-1 rounded-xl text-[10px] font-bold items-center gap-1">
+              <i class="fa-solid fa-book-open"></i>
+              <span>出目表</span>
+            </button>
           </div>
 
-          <!-- Action Buttons for Human Turn -->
-          <div id="human-buttons" class="grid grid-cols-2 sm:flex items-center gap-2 w-full sm:w-auto">
-            <button onclick="triggerHumanPresetThrow('normal')" class="bg-gradient-to-b from-amber-500 to-amber-700 hover:from-amber-400 hover:to-amber-600 text-stone-950 font-black px-3.5 py-2.5 rounded-xl text-xs sm:text-sm shadow-lg border border-amber-300 flex items-center justify-center gap-1.5 active:scale-95 transition">
-              <i class="fa-solid fa-dice"></i>
+          <!-- Action Buttons for Human Turn (4-col 1-row on mobile, crisp nowrap flex row on desktop) -->
+          <div id="human-buttons" class="grid grid-cols-4 lg:flex items-center gap-1.5 sm:gap-2 w-full lg:w-auto shrink-0">
+            <button onclick="triggerHumanPresetThrow('normal')" class="whitespace-nowrap bg-gradient-to-b from-amber-500 to-amber-700 hover:from-amber-400 hover:to-amber-600 text-stone-950 font-black px-1.5 py-2 lg:px-3.5 lg:py-2.5 rounded-xl text-[11px] sm:text-xs lg:text-sm shadow-lg border border-amber-300 flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1.5 active:scale-95 transition">
+              <i class="fa-solid fa-dice text-sm sm:text-xs"></i>
               <span>標準投げ</span>
             </button>
-            <button onclick="triggerHumanPresetThrow('spin')" class="bg-gradient-to-b from-pink-500 to-rose-700 hover:from-pink-400 hover:to-rose-600 text-white font-black px-3 py-2.5 rounded-xl text-xs sm:text-sm shadow-lg border border-pink-300 flex items-center justify-center gap-1.5 active:scale-95 transition" title="横回転をかけて横立ち(5点)を狙う">
-              <i class="fa-solid fa-arrows-spin"></i>
-              <span>スピン技巧</span>
+            <button onclick="triggerHumanPresetThrow('spin')" class="whitespace-nowrap bg-gradient-to-b from-pink-500 to-rose-700 hover:from-pink-400 hover:to-rose-600 text-white font-black px-1.5 py-2 lg:px-3.5 lg:py-2.5 rounded-xl text-[11px] sm:text-xs lg:text-sm shadow-lg border border-pink-300 flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1.5 active:scale-95 transition" title="横回転をかけて横立ち(5点)を狙う">
+              <i class="fa-solid fa-arrows-spin text-sm sm:text-xs"></i>
+              <span>スピン</span>
             </button>
-            <button onclick="triggerHumanPresetThrow('power')" class="bg-gradient-to-b from-red-600 to-amber-800 hover:from-red-500 hover:to-amber-700 text-white font-black px-3 py-2.5 rounded-xl text-xs sm:text-sm shadow-lg border border-red-400 flex items-center justify-center gap-1.5 active:scale-95 transition" title="強めに叩きつけて縦立ち(10点)・逆立ち(20点)を狙う（ションベン注意）">
-              <i class="fa-solid fa-fire"></i>
+            <button onclick="triggerHumanPresetThrow('power')" class="whitespace-nowrap bg-gradient-to-b from-red-600 to-amber-800 hover:from-red-500 hover:to-amber-700 text-white font-black px-1.5 py-2 lg:px-3.5 lg:py-2.5 rounded-xl text-[11px] sm:text-xs lg:text-sm shadow-lg border border-red-400 flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1.5 active:scale-95 transition" title="強めに叩きつけて縦立ち(10点)・逆立ち(20点)を狙う（ションベン注意）">
+              <i class="fa-solid fa-fire text-sm sm:text-xs"></i>
               <span>豪快パワー</span>
             </button>
-            <button onclick="triggerHumanPresetThrow('careful')" class="bg-gradient-to-b from-emerald-600 to-teal-800 hover:from-emerald-500 hover:to-teal-700 text-white font-black px-3 py-2.5 rounded-xl text-xs sm:text-sm shadow-lg border border-emerald-400 flex items-center justify-center gap-1.5 active:scale-95 transition" title="盤外落下を防ぐ慎重投げ（重なり注意）">
-              <i class="fa-solid fa-shield-halved"></i>
+            <button onclick="triggerHumanPresetThrow('careful')" class="whitespace-nowrap bg-gradient-to-b from-emerald-600 to-teal-800 hover:from-emerald-500 hover:to-teal-700 text-white font-black px-1.5 py-2 lg:px-3.5 lg:py-2.5 rounded-xl text-[11px] sm:text-xs lg:text-sm shadow-lg border border-emerald-400 flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1.5 active:scale-95 transition" title="盤外落下を防ぐ慎重投げ（重なり注意）">
+              <i class="fa-solid fa-shield-halved text-sm sm:text-xs"></i>
               <span>慎重投げ</span>
             </button>
           </div>
         </div>
       </div>
 
-      <!-- Mini Scoring Legend Footer -->
-      <div class="bg-stone-950/85 backdrop-blur border border-stone-800 rounded-xl px-3 py-1.5 text-[11px] text-stone-300 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 interactive">
+      <!-- Mini Scoring Legend Footer (Desktop only; mobile uses popover button) -->
+      <div class="desktop-ui bg-stone-950/85 backdrop-blur border border-stone-800 rounded-xl px-3 py-1.5 text-[11px] text-stone-300 flex-wrap items-center justify-center gap-x-3 gap-y-1 interactive">
         <span class="font-bold text-amber-400"><i class="fa-solid fa-book-open mr-1"></i>出目表:</span>
         <span>表=<strong class="text-white">1点</strong></span>
         <span>裏=<strong class="text-stone-400">0点</strong>(4枚全裏=<strong class="text-yellow-400">8点!</strong>)</span>
@@ -287,13 +488,13 @@
   </div>
 
   <!-- CONFIG & CHARACTER MODAL -->
-  <div id="config-modal" class="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 hidden flex items-center justify-center p-3 sm:p-6">
-    <div class="bg-stone-900 border-2 border-amber-600/80 rounded-3xl max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-pop">
+  <div id="config-modal" class="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 hidden flex items-center justify-center p-2.5 sm:p-6">
+    <div class="bg-stone-900 border-2 border-amber-600/80 rounded-3xl max-w-3xl w-full max-h-[90dvh] flex flex-col shadow-2xl overflow-hidden animate-pop">
       <!-- Modal Header -->
-      <div class="bg-stone-950 px-5 py-4 border-b border-stone-800 flex items-center justify-between">
-        <div class="flex items-center gap-2.5">
-          <i class="fa-solid fa-users-gear text-amber-400 text-xl"></i>
-          <h2 class="text-lg sm:text-xl font-black text-amber-300">プレイヤー＆ローカルルール設定</h2>
+      <div class="bg-stone-950 px-4 py-3 sm:px-5 sm:py-4 border-b border-stone-800 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <i class="fa-solid fa-users-gear text-amber-400 text-lg sm:text-xl"></i>
+          <h2 class="text-base sm:text-xl font-black text-amber-300">プレイヤー＆ローカルルール設定</h2>
         </div>
         <button onclick="closeConfigModal()" class="w-8 h-8 rounded-full bg-stone-800 hover:bg-stone-700 text-stone-300 flex items-center justify-center">
           <i class="fa-solid fa-xmark"></i>
@@ -301,69 +502,92 @@
       </div>
 
       <!-- Modal Body -->
-      <div class="p-4 sm:p-6 overflow-y-auto space-y-6">
+      <div class="p-3.5 sm:p-6 overflow-y-auto space-y-5">
         <!-- Player Slots Section -->
         <div>
-          <h3 class="text-sm font-black text-amber-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+          <h3 class="text-xs sm:text-sm font-black text-amber-400 uppercase tracking-wider mb-2.5 flex items-center gap-2">
             <i class="fa-solid fa-gamepad"></i> 1. 4隅のプレイヤーとキャラクター割り当て
           </h3>
-          <div id="modal-player-slots" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div id="modal-player-slots" class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
             <!-- Populated via JS -->
           </div>
         </div>
 
         <!-- Local Rules Section -->
         <div>
-          <h3 class="text-sm font-black text-amber-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+          <h3 class="text-xs sm:text-sm font-black text-amber-400 uppercase tracking-wider mb-2.5 flex items-center gap-2">
             <i class="fa-solid fa-scroll"></i> 2. 金ころがし ローカルルール設定
           </h3>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs sm:text-sm">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3 text-xs sm:text-sm">
             <!-- Corner Warp -->
-            <label class="flex items-center justify-between bg-stone-800/80 border border-stone-700 rounded-2xl p-3 cursor-pointer hover:border-amber-500/50 transition">
+            <label class="flex items-center justify-between gap-2 bg-stone-800/80 border border-stone-700 rounded-2xl p-3 cursor-pointer hover:border-amber-500/50 transition">
               <div>
                 <div class="font-bold text-white">角ワープ（カド飛び）</div>
                 <div class="text-[11px] text-stone-400">四隅の角マスにピッタリ止まると次の角(+8マス)へワープ</div>
               </div>
-              <input type="checkbox" id="rule-corner-warp" checked onchange="updateRulesFromUI()" class="w-5 h-5 accent-amber-500 rounded" />
+              <input type="checkbox" id="rule-corner-warp" checked onchange="updateRulesFromUI()" class="w-5 h-5 accent-amber-500 rounded shrink-0" />
             </label>
 
             <!-- Onbu (Piggyback) -->
-            <label class="flex items-center justify-between bg-stone-800/80 border border-stone-700 rounded-2xl p-3 cursor-pointer hover:border-amber-500/50 transition">
+            <label class="flex items-center justify-between gap-2 bg-stone-800/80 border border-stone-700 rounded-2xl p-3 cursor-pointer hover:border-amber-500/50 transition">
               <div>
                 <div class="font-bold text-white">おんぶ（相乗りシステム）</div>
                 <div class="text-[11px] text-stone-400">同じマスに止まると相手の駒に乗り、相手が進むと一緒に移動</div>
               </div>
-              <input type="checkbox" id="rule-onbu" checked onchange="updateRulesFromUI()" class="w-5 h-5 accent-amber-500 rounded" />
+              <input type="checkbox" id="rule-onbu" checked onchange="updateRulesFromUI()" class="w-5 h-5 accent-amber-500 rounded shrink-0" />
             </label>
 
             <!-- Fast Promotion Mode -->
-            <label class="flex items-center justify-between bg-stone-800/80 border border-stone-700 rounded-2xl p-3 cursor-pointer hover:border-amber-500/50 transition">
+            <label class="flex items-center justify-between gap-2 bg-stone-800/80 border border-stone-700 rounded-2xl p-3 cursor-pointer hover:border-amber-500/50 transition">
               <div>
                 <div class="font-bold text-white">高速昇格モード（サクサク決着）</div>
                 <div class="text-[11px] text-stone-400">ON: 歩→銀→飛車→王将 / OFF: 歩→香→桂→銀→角→飛→王将</div>
               </div>
-              <input type="checkbox" id="rule-fast-promo" checked onchange="updateRulesFromUI()" class="w-5 h-5 accent-amber-500 rounded" />
+              <input type="checkbox" id="rule-fast-promo" checked onchange="updateRulesFromUI()" class="w-5 h-5 accent-amber-500 rounded shrink-0" />
             </label>
 
             <!-- Stack Penalty Backward -->
-            <label class="flex items-center justify-between bg-stone-800/80 border border-stone-700 rounded-2xl p-3 cursor-pointer hover:border-amber-500/50 transition">
+            <label class="flex items-center justify-between gap-2 bg-stone-800/80 border border-stone-700 rounded-2xl p-3 cursor-pointer hover:border-amber-500/50 transition">
               <div>
                 <div class="font-bold text-white">重なり（山）で出目分後退</div>
                 <div class="text-[11px] text-stone-400">ON: 駒が重なると出目分戻る / OFF: 0点（その場にとどまる）</div>
               </div>
-              <input type="checkbox" id="rule-stack-back" onchange="updateRulesFromUI()" class="w-5 h-5 accent-amber-500 rounded" />
+              <input type="checkbox" id="rule-stack-back" onchange="updateRulesFromUI()" class="w-5 h-5 accent-amber-500 rounded shrink-0" />
             </label>
+          </div>
+        </div>
+
+        <!-- BGM & Sound Section -->
+        <div>
+          <h3 class="text-xs sm:text-sm font-black text-emerald-400 uppercase tracking-wider mb-2.5 flex items-center justify-between gap-2">
+            <span><i class="fa-solid fa-music mr-1"></i> 3. 和風フリーBGM・サウンド設定</span>
+            <button onclick="document.getElementById('custom-bgm-input').click()" class="text-[11px] bg-stone-800 hover:bg-stone-700 border border-stone-600 text-amber-200 px-2.5 py-1 rounded-xl font-bold transition">
+              <i class="fa-solid fa-folder-open mr-1"></i>手持ちの音楽ファイルを読込
+            </button>
+          </h3>
+          <div class="bg-stone-800/80 border border-stone-700 rounded-2xl p-3 space-y-3">
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+              <button onclick="selectBgmTrack(0)" id="cfg-bgm-0" class="py-2 px-2 rounded-xl font-bold bg-emerald-600 text-white shadow transition">🌸 陽だまり茶屋</button>
+              <button onclick="selectBgmTrack(1)" id="cfg-bgm-1" class="py-2 px-2 rounded-xl font-bold bg-stone-900 text-stone-300 hover:bg-stone-700 transition">🏮 祭囃子バトル</button>
+              <button onclick="selectBgmTrack(2)" id="cfg-bgm-2" class="py-2 px-2 rounded-xl font-bold bg-stone-900 text-stone-300 hover:bg-stone-700 transition">🌙 月夜の真剣勝負</button>
+              <button onclick="setBgmEnabled(false)" id="cfg-bgm-off" class="py-2 px-2 rounded-xl font-bold bg-stone-900 text-stone-400 hover:bg-stone-700 transition">🔇 BGM OFF</button>
+            </div>
+            <div class="flex items-center gap-3 text-xs text-stone-300">
+              <span class="shrink-0 font-bold"><i class="fa-solid fa-volume-low mr-1 text-emerald-400"></i>BGM音量:</span>
+              <input type="range" id="cfg-bgm-slider" min="0" max="100" value="40" oninput="setBgmVolume(this.value / 100)" class="flex-1 accent-emerald-500" />
+              <span id="cfg-bgm-vol-label" class="w-10 text-right font-black text-emerald-300">40%</span>
+            </div>
           </div>
         </div>
       </div>
 
       <!-- Modal Footer -->
-      <div class="bg-stone-950 px-5 py-3.5 border-t border-stone-800 flex items-center justify-between">
-        <button onclick="resetMatch(); closeConfigModal();" class="bg-red-900/70 hover:bg-red-800 text-red-100 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition">
-          <i class="fa-solid fa-rotate-right mr-1"></i>設定を反映して最初から開始
+      <div class="bg-stone-950 px-4 py-3 sm:px-5 sm:py-3.5 border-t border-stone-800 flex flex-wrap items-center justify-between gap-2">
+        <button onclick="resetMatch(); closeConfigModal();" class="bg-red-900/70 hover:bg-red-800 text-red-100 px-3 py-2 sm:px-4 rounded-xl text-xs sm:text-sm font-bold transition">
+          <i class="fa-solid fa-rotate-right mr-1"></i>最初から開始
         </button>
-        <button onclick="closeConfigModal()" class="bg-amber-500 hover:bg-amber-400 text-stone-950 font-black px-6 py-2 rounded-xl text-xs sm:text-sm shadow-lg transition">
-          閉じる（現在の対局を続ける）
+        <button onclick="closeConfigModal()" class="bg-amber-500 hover:bg-amber-400 text-stone-950 font-black px-5 py-2 sm:px-6 rounded-xl text-xs sm:text-sm shadow-lg transition">
+          閉じる（対局を続ける）
         </button>
       </div>
     </div>
@@ -371,7 +595,7 @@
 
   <!-- VICTORY MODAL -->
   <div id="victory-modal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
-    <div class="bg-gradient-to-b from-stone-900 to-stone-950 border-2 border-yellow-400 rounded-3xl max-w-md w-full p-6 text-center shadow-[0_0_60px_rgba(250,204,21,0.5)] animate-pop">
+    <div class="bg-gradient-to-b from-stone-900 to-stone-950 border-2 border-yellow-400 rounded-3xl max-w-md w-full p-5 sm:p-6 text-center shadow-[0_0_60px_rgba(250,204,21,0.5)] animate-pop">
       <div class="text-5xl mb-2">👑</div>
       <div class="text-xs font-black tracking-widest uppercase text-yellow-400 mb-1">WINNER - 王将ゴール達成！</div>
       <h2 id="victory-title" class="text-2xl sm:text-3xl font-black text-white mb-2">おんJ民 の勝利！</h2>
@@ -385,37 +609,37 @@
   </div>
 
   <!-- RECORDING STUDIO & VIDEO DOWNLOAD MODAL -->
-  <div id="record-modal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 hidden flex items-center justify-center p-3 sm:p-6">
-    <div class="bg-stone-900 border-2 border-rose-500/80 rounded-3xl max-w-4xl w-full max-h-[92vh] flex flex-col shadow-[0_0_50px_rgba(244,63,94,0.35)] overflow-hidden animate-pop">
+  <div id="record-modal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 hidden flex items-center justify-center p-2.5 sm:p-6">
+    <div class="bg-stone-900 border-2 border-rose-500/80 rounded-3xl max-w-4xl w-full max-h-[90dvh] flex flex-col shadow-[0_0_50px_rgba(244,63,94,0.35)] overflow-hidden animate-pop">
       <!-- Header -->
-      <div class="bg-stone-950 px-5 py-3.5 border-b border-stone-800 flex items-center justify-between">
-        <div class="flex items-center gap-2.5">
-          <div class="w-9 h-9 rounded-xl bg-rose-600/20 border border-rose-500/50 flex items-center justify-center text-rose-400">
-            <i class="fa-solid fa-film text-lg"></i>
+      <div class="bg-stone-950 px-4 py-3 sm:px-5 sm:py-3.5 border-b border-stone-800 flex items-center justify-between gap-2">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <div class="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-rose-600/20 border border-rose-500/50 flex items-center justify-center text-rose-400 shrink-0">
+            <i class="fa-solid fa-film text-base sm:text-lg"></i>
           </div>
-          <div>
-            <h2 class="text-base sm:text-lg font-black text-white flex items-center gap-2">
-              <span>プレイ動画＆CPU音声 録画スタジオ</span>
-              <span id="rec-format-badge" class="text-[10px] bg-rose-600/30 border border-rose-400/50 text-rose-200 px-2 py-0.5 rounded-full">HD 1280x720 60fps</span>
+          <div class="min-w-0">
+            <h2 class="text-sm sm:text-lg font-black text-white flex items-center gap-2 flex-wrap">
+              <span>録画スタジオ</span>
+              <span id="rec-format-badge" class="text-[10px] bg-rose-600/30 border border-rose-400/50 text-rose-200 px-2 py-0.5 rounded-full">HD 1280x720</span>
             </h2>
-            <p class="text-[11px] text-stone-400">3D盤面＋実況字幕カットイン＋出目ポップアップ＋CPUボイス＆効果音を1つの動画に合成録画します</p>
+            <p class="text-[10px] sm:text-xs text-stone-400 truncate">3D盤面＋字幕＋出目＋ボイス＆和風BGMを1つの動画に合成録画</p>
           </div>
         </div>
-        <button onclick="closeRecordModal()" class="w-8 h-8 rounded-full bg-stone-800 hover:bg-stone-700 text-stone-300 flex items-center justify-center">
+        <button onclick="closeRecordModal()" class="w-8 h-8 rounded-full bg-stone-800 hover:bg-stone-700 text-stone-300 flex items-center justify-center shrink-0">
           <i class="fa-solid fa-xmark"></i>
         </button>
       </div>
 
       <!-- Body -->
-      <div class="p-4 sm:p-5 overflow-y-auto grid grid-cols-1 lg:grid-cols-12 gap-5">
+      <div class="p-3.5 sm:p-5 overflow-y-auto grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5">
         <!-- Left Column: Video Preview Player & Active Download (7 cols) -->
         <div class="lg:col-span-7 flex flex-col gap-3">
           <div class="bg-stone-950 border border-stone-800 rounded-2xl overflow-hidden aspect-video relative flex items-center justify-center shadow-inner">
             <video id="recorded-video-preview" controls playsinline class="w-full h-full object-contain hidden"></video>
-            <div id="video-empty-state" class="text-center p-6 text-stone-500">
-              <i class="fa-solid fa-clapperboard text-4xl mb-2 text-stone-600"></i>
+            <div id="video-empty-state" class="text-center p-4 sm:p-6 text-stone-500">
+              <i class="fa-solid fa-clapperboard text-3xl sm:text-4xl mb-2 text-stone-600"></i>
               <p class="text-xs sm:text-sm font-bold text-stone-400">まだ録画されたクリップがありません</p>
-              <p class="text-[11px] text-stone-500 mt-1">画面上部の「🔴 録画開始」を押して金将を振ると、ここにプレビュー動画が表示されます</p>
+              <p class="text-[11px] text-stone-500 mt-1">「🔴 録画開始」を押して金将を振ると、ここにプレビュー動画が表示されます</p>
             </div>
           </div>
 
@@ -428,7 +652,7 @@
             <div class="flex items-center gap-2 shrink-0">
               <button onclick="downloadSelectedClip()" id="btn-download-clip" disabled class="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 disabled:opacity-40 disabled:pointer-events-none text-stone-950 font-black px-4 py-2 rounded-xl text-xs sm:text-sm flex items-center gap-1.5 shadow-lg transition">
                 <i class="fa-solid fa-download"></i>
-                <span>動画をダウンロード保存</span>
+                <span>動画を保存</span>
               </button>
             </div>
           </div>
@@ -437,7 +661,7 @@
           <div class="bg-stone-950/70 border border-stone-800 rounded-2xl p-3">
             <div class="text-xs font-black text-stone-300 mb-2 flex items-center justify-between">
               <span><i class="fa-solid fa-list-ul text-rose-400 mr-1.5"></i>今回のセッションの録画クリップ一覧</span>
-              <span class="text-[11px] text-stone-500">クリックで再生切替</span>
+              <span class="text-[11px] text-stone-500">タップで再生</span>
             </div>
             <div id="recorded-clips-list" class="space-y-1.5 max-h-36 overflow-y-auto">
               <div class="text-xs text-stone-500 py-2 text-center">録画履歴なし</div>
@@ -453,7 +677,7 @@
               <span>CPUボイスの動画録音モード設定</span>
             </h3>
             <p class="text-[11px] text-stone-300 leading-relaxed">
-              ブラウザ標準の音声合成（Web Speech）に加え、**動画ファイル内に確実にキャラの声を録音する専用フォルマント音声シンセ**を搭載しています。
+              ブラウザ標準の音声合成に加え、**動画ファイル内に確実にキャラの声を録音する専用フォルマント音声シンセ**を搭載しています。
             </p>
 
             <!-- Voice Synth Mode Selector -->
@@ -462,7 +686,7 @@
                 <input type="radio" name="voice-rec-mode" value="hybrid" checked onchange="setVoiceRecMode('hybrid')" class="mt-0.5 accent-rose-500" />
                 <div>
                   <div class="font-bold text-white">① ハイブリッド（推奨・設定不要）</div>
-                  <div class="text-[11px] text-stone-400">プレイ中はブラウザ標準TTS＋動画ファイル内にはキャラ別母音フォルマント合成ボイスを自動録音</div>
+                  <div class="text-[11px] text-stone-400">プレイ中は標準TTS＋動画内には母音フォルマント合成ボイスを自動録音</div>
                 </div>
               </label>
 
@@ -470,7 +694,7 @@
                 <input type="radio" name="voice-rec-mode" value="synth" onchange="setVoiceRecMode('synth')" class="mt-0.5 accent-rose-500" />
                 <div>
                   <div class="font-bold text-white">② レトロ合成ボイス（プレイ音＝録画音100%一致）</div>
-                  <div class="text-[11px] text-stone-400">プレイ中も録画動画も、キャラ別周波数（おんJ 145Hz / メスガキ 290Hz / 野獣 110Hz / ツイフェミ 235Hz）の合成ボイスで再生・録音</div>
+                  <div class="text-[11px] text-stone-400">プレイ中も録画動画もキャラ別周波数の合成ボイスで再生・録音</div>
                 </div>
               </label>
 
@@ -478,7 +702,7 @@
                 <input type="radio" name="voice-rec-mode" value="voicevox" onchange="setVoiceRecMode('voicevox')" class="mt-0.5 accent-rose-500" />
                 <div>
                   <div class="font-bold text-white">③ VOICEVOX ローカル連携 (localhost:50021)</div>
-                  <div class="text-[11px] text-stone-400">PCで起動中のVOICEVOXから音声を生成し、高音質のまま動画ストリームへ直接録音（未検出時は①へ自動フォールバック）</div>
+                  <div class="text-[11px] text-stone-400">PCで起動中のVOICEVOX音声を直接録音（未検出時は①へ自動フォールバック）</div>
                 </div>
               </label>
             </div>
@@ -487,10 +711,10 @@
             <div class="pt-2 border-t border-stone-700 space-y-2">
               <div class="flex items-center justify-between">
                 <div>
-                  <div class="text-xs font-bold text-white">🎵 和風テーブルBGMを流す＆録音</div>
-                  <div class="text-[10px] text-stone-400">対局を盛り上げる軽快な和風シンセBGM</div>
+                  <div class="text-xs font-bold text-white">🎵 和風BGMを流す＆録音</div>
+                  <div class="text-[10px] text-stone-400">箏・三味線・篠笛・和太鼓アンサンブルBGM</div>
                 </div>
-                <input type="checkbox" id="toggle-bgm" onchange="toggleBgm(this.checked)" class="w-4 h-4 accent-amber-500 rounded" />
+                <input type="checkbox" id="toggle-bgm" checked onchange="setBgmEnabled(this.checked)" class="w-4 h-4 accent-emerald-500 rounded" />
               </div>
 
               <div class="flex items-center justify-between">
@@ -504,27 +728,25 @@
               </div>
             </div>
 
-            <!-- Tab / System Audio Capture Alternative -->
-            <div class="pt-2 border-t border-stone-700">
+            <!-- Tab / System Audio Capture Alternative (Desktop browsers only) -->
+            <div id="tab-capture-section" class="pt-2 border-t border-stone-700">
               <button onclick="startTabDisplayRecording()" class="w-full bg-stone-900 hover:bg-stone-950 border border-amber-500/40 text-amber-200 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition">
                 <i class="fa-solid fa-desktop text-amber-400"></i>
                 <span>PCタブ音声ごと画面キャプチャ録画を開始</span>
               </button>
-              <p class="text-[10px] text-stone-400 mt-1 text-center">※Chrome等で「タブの音声も共有」にチェックを入れるとWeb Speech APIの生声もそのまま録音できます</p>
+              <p class="text-[10px] text-stone-400 mt-1 text-center">※PC版Chrome等で「タブの音声も共有」を入れるとWeb Speech APIの生声も録音可能</p>
             </div>
           </div>
         </div>
       </div>
 
       <!-- Footer -->
-      <div class="bg-stone-950 px-5 py-3 border-t border-stone-800 flex items-center justify-between">
-        <div class="flex items-center gap-2">
-          <button onclick="toggleRecording(); closeRecordModal();" id="modal-rec-btn" class="bg-rose-600 hover:bg-rose-500 text-white font-black px-4 py-2 rounded-xl text-xs sm:text-sm flex items-center gap-1.5 shadow transition">
-            <i class="fa-solid fa-circle"></i>
-            <span>新しい録画を開始して対局へ戻る</span>
-          </button>
-        </div>
-        <button onclick="closeRecordModal()" class="bg-stone-800 hover:bg-stone-700 text-stone-200 font-bold px-5 py-2 rounded-xl text-xs sm:text-sm transition">
+      <div class="bg-stone-950 px-4 py-3 sm:px-5 border-t border-stone-800 flex flex-wrap items-center justify-between gap-2">
+        <button onclick="toggleRecording(); closeRecordModal();" id="modal-rec-btn" class="bg-rose-600 hover:bg-rose-500 text-white font-black px-3.5 py-2 sm:px-4 rounded-xl text-xs sm:text-sm flex items-center gap-1.5 shadow transition">
+          <i class="fa-solid fa-circle"></i>
+          <span>録画開始して対局へ戻る</span>
+        </button>
+        <button onclick="closeRecordModal()" class="bg-stone-800 hover:bg-stone-700 text-stone-200 font-bold px-4 py-2 sm:px-5 rounded-xl text-xs sm:text-sm transition">
           閉じる
         </button>
       </div>
@@ -808,7 +1030,7 @@
     };
 
     /**************************************************************************
-     * 3. WEB AUDIO API (MASTER RECORDING BUS, WOOD CLACKS, FORMANT VOICE SYNTH & BGM)
+     * 3. WEB AUDIO API (MASTER RECORDING BUS, WOOD CLACKS, FORMANT VOICE SYNTH & ROYALTY-FREE BGM ENGINE)
      **************************************************************************/
     let audioCtx = null;
     let masterAudioGain = null;
@@ -816,8 +1038,27 @@
     let micStream = null;
     let micSourceNode = null;
     let isMicMixed = false;
-    let bgmInterval = null;
-    let isBgmPlaying = false;
+
+    // BGM Engine State (100% Royalty-Free Original Procedural Ensemble + Custom Audio File Support)
+    let isBgmPlaying = true; // Enabled by default; starts automatically on first user gesture or unlocked AudioContext
+    let currentBgmTrackIdx = 0; // 0: 陽だまり茶屋, 1: 祭囃子バトル, 2: 月夜の真剣勝負, 3: カスタム音源
+    let bgmVolume = 0.40;
+    let bgmMasterGain = null;
+    let bgmWetGain = null;
+    let bgmConvolver = null;
+    let bgmSchedulerTimer = null;
+    let bgmNextStepTime = 0;
+    let bgmCurrentStep = 0;
+    let customBgmBuffer = null;
+    let customBgmSource = null;
+    let customBgmName = 'カスタムBGM';
+    const bgmBufferCache = {};
+
+    const BGM_TRACKS = [
+      { id: 0, name: '陽だまり茶屋', short: '🌸茶屋', bpm: 118, totalSteps: 128 },
+      { id: 1, name: '祭囃子バトル', short: '🏮祭囃子', bpm: 136, totalSteps: 128 },
+      { id: 2, name: '月夜の真剣勝負', short: '🌙真剣勝負', bpm: 128, totalSteps: 128 }
+    ];
 
     function ensureAudioCtx() {
       if (!audioCtx) {
@@ -831,10 +1072,15 @@
             mediaStreamDest = audioCtx.createMediaStreamDestination();
             masterAudioGain.connect(mediaStreamDest);
           }
+          initBgmAudioGraph();
         }
       }
       if (audioCtx && audioCtx.state === 'suspended') {
-        audioCtx.resume();
+        audioCtx.resume().then(() => {
+          if (isBgmPlaying) startBgmEngineIfNeeded();
+        }).catch(() => {});
+      } else if (audioCtx && audioCtx.state === 'running' && isBgmPlaying) {
+        startBgmEngineIfNeeded();
       }
     }
 
@@ -842,6 +1088,513 @@
       ensureAudioCtx();
       return masterAudioGain || (audioCtx ? audioCtx.destination : null);
     }
+
+    // Build stereo reverb & dedicated BGM submix routed into masterAudioGain (captures cleanly in recordings!)
+    function initBgmAudioGraph() {
+      if (!audioCtx || bgmMasterGain) return;
+      bgmMasterGain = audioCtx.createGain();
+      bgmMasterGain.gain.value = bgmVolume;
+      bgmMasterGain.connect(masterAudioGain);
+
+      // Lightweight warm room impulse response for Koto & Shinobue
+      const sr = audioCtx.sampleRate;
+      const irLen = Math.floor(sr * 0.85);
+      const irBuf = audioCtx.createBuffer(2, irLen, sr);
+      let seed = 12345;
+      const nextRand = () => {
+        seed = (seed * 1664525 + 1013904223) >>> 0;
+        return (seed / 2147483648) - 1.0;
+      };
+      for (let ch = 0; ch < 2; ch++) {
+        const data = irBuf.getChannelData(ch);
+        let lp = 0;
+        for (let i = 0; i < irLen; i++) {
+          const t = i / sr;
+          const env = Math.exp(-t / 0.22);
+          const n = nextRand();
+          lp = lp * 0.72 + n * 0.28;
+          data[i] = lp * env * 0.5;
+        }
+      }
+      bgmConvolver = audioCtx.createConvolver();
+      bgmConvolver.buffer = irBuf;
+      bgmWetGain = audioCtx.createGain();
+      bgmWetGain.gain.value = 0.26;
+      bgmConvolver.connect(bgmWetGain);
+      bgmWetGain.connect(bgmMasterGain);
+    }
+
+    function midiToFreq(midi) {
+      return 440 * Math.pow(2, (midi - 69) / 12);
+    }
+
+    // Physical-modeling Karplus-Strong plucked string AudioBuffer generator (Koto / Shamisen / Wood Bass)
+    function getPluckedBuffer(instType, midi) {
+      const key = `${instType}_${midi}`;
+      if (bgmBufferCache[key]) return bgmBufferCache[key];
+      if (!audioCtx) return null;
+
+      const sr = audioCtx.sampleRate;
+      const freq = midiToFreq(midi);
+      let duration = 1.25, brightness = 0.68, pickPos = 0.18, bodyRes = 320;
+      if (instType === 'shami') {
+        duration = 0.52; brightness = 0.90; pickPos = 0.10; bodyRes = 540;
+      } else if (instType === 'bass') {
+        duration = 0.80; brightness = 0.36; pickPos = 0.35; bodyRes = 115;
+      }
+
+      const nSamples = Math.floor(sr * duration);
+      const buf = audioCtx.createBuffer(1, nSamples, sr);
+      const out = buf.getChannelData(0);
+
+      const period = Math.max(2, Math.round(sr / freq));
+      const delayLine = new Float32Array(period);
+      const raw = new Float32Array(period);
+      let s = (midi * 9781 + 31337) >>> 0;
+      for (let i = 0; i < period; i++) {
+        s = (s * 1664525 + 1013904223) >>> 0;
+        raw[i] = (s / 2147483648) - 1.0;
+      }
+      const combDelay = Math.max(1, Math.floor(period * pickPos));
+      let prev = 0;
+      for (let i = 0; i < period; i++) {
+        const v = raw[i] - 0.65 * raw[(i - combDelay + period) % period];
+        prev = prev + brightness * (v - prev);
+        delayLine[i] = prev;
+      }
+
+      const decay = Math.min(0.9965, Math.max(0.975, Math.pow(0.002, 1.0 / Math.max(1, duration * 0.85 * freq))));
+      const damp = 0.24 + 0.36 * (1.0 - brightness);
+      let idx = 0;
+      for (let i = 0; i < nSamples; i++) {
+        const cur = delayLine[idx];
+        const nxt = delayLine[(idx + 1) % period];
+        delayLine[idx] = ((1.0 - damp) * cur + damp * nxt) * decay;
+        out[i] = cur;
+        idx = (idx + 1) % period;
+      }
+
+      // Authentic plectrum (tsume / bachi) woody transient
+      const clickLen = Math.min(Math.floor(sr * 0.008), nSamples);
+      for (let i = 0; i < clickLen; i++) {
+        const env = Math.exp(-i / (sr * 0.002));
+        out[i] += env * 0.32 * Math.sin(2 * Math.PI * bodyRes * 3.4 * i / sr);
+      }
+
+      bgmBufferCache[key] = buf;
+      return buf;
+    }
+
+    // Bamboo Flute (Shinobue / Shakuhachi) AudioBuffer generator
+    function getFluteBuffer(midi, durSteps, stepSec) {
+      const qSteps = Math.max(1, Math.round(durSteps));
+      const key = `flute_${midi}_${qSteps}_${Math.round(stepSec * 1000)}`;
+      if (bgmBufferCache[key]) return bgmBufferCache[key];
+      if (!audioCtx) return null;
+
+      const sr = audioCtx.sampleRate;
+      const duration = Math.max(0.12, qSteps * stepSec * 0.94);
+      const nSamples = Math.floor(sr * duration);
+      const buf = audioCtx.createBuffer(1, nSamples, sr);
+      const out = buf.getChannelData(0);
+      const freq = midiToFreq(midi);
+
+      let phase = 0;
+      let noiseLp = 0;
+      let s = (midi * 4177 + 99991) >>> 0;
+      for (let i = 0; i < nSamples; i++) {
+        const t = i / sr;
+        const att = Math.min(1.0, t / 0.05);
+        const rel = duration - t < 0.075 ? Math.max(0, (duration - t) / 0.075) : 1.0;
+        const vib = t > 0.11 ? 1.0 + 0.0075 * Math.sin(2 * Math.PI * 5.3 * t) : 1.0;
+        phase += (2 * Math.PI * freq * vib) / sr;
+        const tone = 0.72 * Math.sin(phase) + 0.20 * Math.sin(2 * phase) + 0.08 * Math.sin(3 * phase);
+        s = (s * 1664525 + 1013904223) >>> 0;
+        const n = (s / 2147483648) - 1.0;
+        noiseLp = noiseLp * 0.88 + n * 0.12;
+        const chiff = noiseLp * (0.24 * Math.exp(-t / 0.055) + 0.045);
+        out[i] = att * rel * (tone + chiff) * 0.55;
+      }
+
+      bgmBufferCache[key] = buf;
+      return buf;
+    }
+
+    // Traditional Japanese Percussion Buffers (Taiko Don, Taiko Ka, Hyoshigi Clapper)
+    function getPercBuffer(type) {
+      const key = `perc_${type}`;
+      if (bgmBufferCache[key]) return bgmBufferCache[key];
+      if (!audioCtx) return null;
+
+      const sr = audioCtx.sampleRate;
+      if (type === 'hyoshi') {
+        const n = Math.floor(sr * 0.09);
+        const buf = audioCtx.createBuffer(1, n, sr);
+        const out = buf.getChannelData(0);
+        for (let i = 0; i < n; i++) {
+          const t = i / sr;
+          const env = Math.exp(-t / 0.014);
+          out[i] = env * 0.38 * (
+            0.65 * Math.sin(2 * Math.PI * 1760 * t) +
+            0.35 * Math.sin(2 * Math.PI * 2720 * t) +
+            0.20 * Math.sin(2 * Math.PI * 3950 * t)
+          );
+        }
+        bgmBufferCache[key] = buf;
+        return buf;
+      }
+
+      const isLow = type === 'don';
+      const dur = isLow ? 0.30 : 0.15;
+      const n = Math.floor(sr * dur);
+      const buf = audioCtx.createBuffer(1, n, sr);
+      const out = buf.getChannelData(0);
+      let phase = 0;
+      let s = isLow ? 777 : 3333;
+      for (let i = 0; i < n; i++) {
+        const t = i / sr;
+        const f0 = (isLow ? 132 : 255) * Math.exp(-t / (isLow ? 0.045 : 0.024)) + (isLow ? 56 : 135);
+        phase += (2 * Math.PI * f0) / sr;
+        const env = Math.exp(-t / (isLow ? 0.105 : 0.042));
+        s = (s * 1664525 + 1013904223) >>> 0;
+        const skin = ((s / 2147483648) - 1.0) * Math.exp(-t / 0.008) * 0.42;
+        out[i] = (Math.sin(phase) * env * 0.85 + skin) * (isLow ? 0.72 : 0.48);
+      }
+      bgmBufferCache[key] = buf;
+      return buf;
+    }
+
+    function scheduleBgmBuffer(buf, time, gainVal, panVal = 0, sendReverb = true) {
+      if (!audioCtx || !bgmMasterGain || !buf) return;
+      const src = audioCtx.createBufferSource();
+      src.buffer = buf;
+      const g = audioCtx.createGain();
+      g.gain.value = gainVal;
+
+      if (typeof audioCtx.createStereoPanner === 'function') {
+        const panner = audioCtx.createStereoPanner();
+        panner.pan.value = Math.max(-1, Math.min(1, panVal));
+        src.connect(g);
+        g.connect(panner);
+        panner.connect(bgmMasterGain);
+        if (sendReverb && bgmConvolver) panner.connect(bgmConvolver);
+      } else {
+        src.connect(g);
+        g.connect(bgmMasterGain);
+        if (sendReverb && bgmConvolver) g.connect(bgmConvolver);
+      }
+      src.start(time);
+    }
+
+    // Score Data for the 3 Original Japanese Tabletop Tracks (128 sixteenth-note steps = 8 bars each with A/B phrasing)
+    const TRACK1_CHORDS = [
+      [50, [62, 66, 69, 74]], [47, [59, 62, 66, 71]], [43, [55, 59, 62, 69]], [45, [57, 61, 64, 69]],
+      [42, [54, 57, 61, 66]], [47, [59, 62, 66, 71]], [40, [52, 55, 59, 64]], [45, [57, 62, 64, 69]]
+    ];
+    const TRACK1_MELODY = new Map([
+      [0,[74,3]],[3,[76,1]],[4,[78,4]],[8,[76,2]],[10,[74,2]],[12,[69,4]],
+      [16,[71,3]],[19,[74,1]],[20,[76,4]],[24,[74,2]],[26,[71,2]],[28,[69,4]],
+      [32,[66,2]],[34,[69,2]],[36,[71,4]],[40,[74,2]],[42,[76,2]],[44,[78,4]],
+      [48,[81,4]],[52,[78,2]],[54,[76,2]],[56,[74,6]],[62,[76,2]],
+      [64,[78,3]],[67,[81,1]],[68,[78,2]],[70,[76,2]],[72,[74,4]],[76,[71,4]],
+      [80,[69,2]],[82,[71,2]],[84,[74,4]],[88,[76,2]],[90,[74,2]],[92,[71,4]],
+      [96,[69,3]],[99,[66,1]],[100,[64,4]],[104,[66,2]],[106,[69,2]],[108,[71,4]],
+      [112,[74,4]],[116,[76,2]],[118,[78,2]],[120,[74,6]]
+    ]);
+
+    const TRACK2_CHORDS = [
+      [40, [52, 59, 64]], [40, [52, 59, 64]], [43, [55, 62, 67]], [45, [57, 64, 69]],
+      [40, [52, 59, 64]], [43, [55, 62, 67]], [47, [59, 66, 71]], [40, [52, 59, 64]]
+    ];
+    const TRACK2_MELODY = new Map([
+      [0,[76,3]],[3,[79,1]],[4,[76,2]],[6,[74,2]],[8,[71,2]],[10,[74,2]],[12,[76,4]],
+      [16,[79,2]],[18,[76,2]],[20,[74,2]],[22,[71,2]],[24,[69,2]],[26,[71,2]],[28,[67,4]],
+      [32,[64,2]],[34,[67,2]],[36,[69,3]],[39,[71,1]],[40,[74,2]],[42,[76,2]],[44,[71,4]],
+      [48,[74,2]],[50,[71,2]],[52,[69,2]],[54,[67,2]],[56,[64,6]],[62,[71,2]],
+      [64,[76,2]],[66,[79,2]],[68,[81,4]],[72,[79,2]],[74,[76,2]],[76,[74,4]],
+      [80,[71,2]],[82,[74,2]],[84,[76,4]],[88,[74,2]],[90,[71,2]],[92,[69,4]],
+      [96,[71,3]],[99,[74,1]],[100,[71,2]],[102,[69,2]],[104,[67,2]],[106,[69,2]],[108,[71,4]],
+      [112,[64,4]],[116,[67,2]],[118,[71,2]],[120,[76,6]]
+    ]);
+
+    const TRACK3_CHORDS = [
+      [45, [57, 64, 69, 64]], [46, [58, 65, 70, 65]], [50, [62, 69, 74, 69]], [52, [64, 69, 76, 69]],
+      [45, [57, 64, 69, 64]], [53, [65, 72, 77, 72]], [50, [62, 69, 74, 69]], [52, [64, 71, 76, 71]]
+    ];
+    const TRACK3_MELODY = new Map([
+      [0,[69,4]],[4,[70,2]],[6,[74,2]],[8,[76,6]],[14,[74,2]],
+      [16,[77,4]],[20,[76,2]],[22,[74,2]],[24,[70,6]],[30,[69,2]],
+      [32,[74,3]],[35,[76,1]],[36,[77,4]],[40,[76,2]],[42,[74,2]],[44,[70,4]],
+      [48,[69,2]],[50,[70,2]],[52,[74,4]],[56,[76,8]],
+      [64,[81,4]],[68,[77,2]],[70,[76,2]],[72,[74,6]],[78,[76,2]],
+      [80,[77,4]],[84,[81,4]],[88,[76,4]],[92,[74,4]],
+      [96,[70,3]],[99,[74,1]],[100,[76,4]],[104,[74,2]],[106,[70,2]],[108,[69,4]],
+      [112,[70,2]],[114,[69,2]],[116,[64,4]],[120,[69,8]]
+    ]);
+
+    function scheduleSingleBgmStep(stepIdx, time) {
+      if (currentBgmTrackIdx === 3) return; // Custom file handled via loop buffer source
+      const track = BGM_TRACKS[currentBgmTrackIdx] || BGM_TRACKS[0];
+      const stepSec = (60 / track.bpm) / 4;
+      const bar = Math.floor(stepIdx / 16);
+      const inBar = stepIdx % 16;
+
+      if (currentBgmTrackIdx === 0) {
+        // Track 0: Hidamari Chaya (Bright Koto + Shamisen + Shinobue)
+        const [bassM, arp] = TRACK1_CHORDS[bar % 8];
+        const mel = TRACK1_MELODY.get(stepIdx);
+        if (mel) {
+          scheduleBgmBuffer(getPluckedBuffer('koto', mel[0]), time, 0.42, -0.22, true);
+          if (stepIdx >= 64) {
+            scheduleBgmBuffer(getFluteBuffer(mel[0], mel[1], stepSec), time, 0.27, 0.25, true);
+          }
+        }
+        if (inBar === 0) scheduleBgmBuffer(getPluckedBuffer('bass', bassM), time, 0.40, 0, false);
+        if (inBar === 6) scheduleBgmBuffer(getPluckedBuffer('bass', bassM + 7), time, 0.26, 0, false);
+        if (inBar === 8) scheduleBgmBuffer(getPluckedBuffer('bass', bassM), time, 0.36, 0, false);
+        if (inBar === 14) scheduleBgmBuffer(getPluckedBuffer('bass', bassM + 12), time, 0.25, 0, false);
+
+        if (inBar % 2 === 0) {
+          const note = arp[(inBar / 2) % arp.length];
+          scheduleBgmBuffer(getPluckedBuffer('koto', note), time, 0.16, 0.32, true);
+        }
+        if (inBar === 4 || inBar === 12 || inBar === 15) {
+          scheduleBgmBuffer(getPluckedBuffer('shami', arp[2]), time, 0.19, -0.35, false);
+          scheduleBgmBuffer(getPluckedBuffer('shami', arp[3]), time, 0.15, -0.35, false);
+        }
+        if (inBar === 0 || inBar === 10) scheduleBgmBuffer(getPercBuffer('don'), time, 0.32, 0, false);
+        if (inBar === 4 || inBar === 12) scheduleBgmBuffer(getPercBuffer('ka'), time, 0.22, 0.15, false);
+        if (bar % 2 === 1 && inBar === 14) scheduleBgmBuffer(getPercBuffer('hyoshi'), time, 0.24, -0.25, false);
+
+      } else if (currentBgmTrackIdx === 1) {
+        // Track 1: Matsuri Bayashi Battle (Festive Shinobue + Shamisen + Taiko)
+        const [bassM, arp] = TRACK2_CHORDS[bar % 8];
+        const mel = TRACK2_MELODY.get(stepIdx);
+        if (mel) {
+          scheduleBgmBuffer(getFluteBuffer(mel[0], mel[1], stepSec), time, 0.38, 0.18, true);
+          scheduleBgmBuffer(getPluckedBuffer('shami', mel[0] - 12), time, 0.26, -0.25, false);
+        }
+        if ([0, 3, 6, 8, 11, 14].includes(inBar)) {
+          scheduleBgmBuffer(getPluckedBuffer('bass', bassM), time, 0.35, 0, false);
+        }
+        if (inBar % 2 === 0) {
+          scheduleBgmBuffer(getPluckedBuffer('shami', arp[(inBar / 2) % arp.length]), time, 0.20, -0.3, false);
+        }
+        if ([0, 6, 8, 14].includes(inBar)) scheduleBgmBuffer(getPercBuffer('don'), time, 0.38, 0, false);
+        if ([2, 4, 10, 12].includes(inBar)) scheduleBgmBuffer(getPercBuffer('ka'), time, 0.26, 0.15, false);
+        if (inBar === 4 || inBar === 12) scheduleBgmBuffer(getPercBuffer('hyoshi'), time, 0.22, -0.2, false);
+
+      } else if (currentBgmTrackIdx === 2) {
+        // Track 2: Tsukiyo no Shinken Shobu (Driving Tsugaru Shamisen + Miyako-bushi Koto & Flute)
+        const [bassM, ost] = TRACK3_CHORDS[bar % 8];
+        const mel = TRACK3_MELODY.get(stepIdx);
+        if (mel) {
+          scheduleBgmBuffer(getPluckedBuffer('koto', mel[0]), time, 0.40, -0.2, true);
+          scheduleBgmBuffer(getFluteBuffer(mel[0], mel[1], stepSec), time, 0.30, 0.22, true);
+        }
+        if (inBar % 4 === 0) {
+          scheduleBgmBuffer(getPluckedBuffer('bass', bassM), time, 0.38, 0, false);
+        }
+        if (inBar % 2 === 0 || inBar === 3 || inBar === 11 || inBar === 15) {
+          scheduleBgmBuffer(getPluckedBuffer('shami', ost[inBar % 4]), time, 0.21, -0.32, false);
+        }
+        if ([0, 3, 8, 10].includes(inBar)) scheduleBgmBuffer(getPercBuffer('don'), time, 0.38, 0, false);
+        if ([4, 12, 15].includes(inBar)) scheduleBgmBuffer(getPercBuffer('ka'), time, 0.25, 0.15, false);
+      }
+    }
+
+    function stopCustomBgmSource() {
+      if (customBgmSource) {
+        try { customBgmSource.stop(); customBgmSource.disconnect(); } catch (e) {}
+        customBgmSource = null;
+      }
+    }
+
+    function startCustomBgmSource() {
+      stopCustomBgmSource();
+      if (!audioCtx || !bgmMasterGain || !customBgmBuffer || !isBgmPlaying) return;
+      customBgmSource = audioCtx.createBufferSource();
+      customBgmSource.buffer = customBgmBuffer;
+      customBgmSource.loop = true;
+      customBgmSource.connect(bgmMasterGain);
+      customBgmSource.start(0);
+    }
+
+    function startBgmEngineIfNeeded() {
+      if (!isBgmPlaying || !audioCtx || audioCtx.state !== 'running') return;
+      initBgmAudioGraph();
+
+      if (currentBgmTrackIdx === 3 && customBgmBuffer) {
+        if (bgmSchedulerTimer) { clearInterval(bgmSchedulerTimer); bgmSchedulerTimer = null; }
+        if (!customBgmSource) startCustomBgmSource();
+        return;
+      }
+
+      stopCustomBgmSource();
+      if (bgmSchedulerTimer) return; // Already running
+
+      bgmNextStepTime = audioCtx.currentTime + 0.05;
+      bgmSchedulerTimer = setInterval(() => {
+        if (!isBgmPlaying || !audioCtx || audioCtx.state !== 'running') return;
+        const track = BGM_TRACKS[currentBgmTrackIdx] || BGM_TRACKS[0];
+        const stepSec = (60 / track.bpm) / 4;
+        while (bgmNextStepTime < audioCtx.currentTime + 0.18) {
+          scheduleSingleBgmStep(bgmCurrentStep, bgmNextStepTime);
+          bgmCurrentStep = (bgmCurrentStep + 1) % track.totalSteps;
+          bgmNextStepTime += stepSec;
+        }
+      }, 60);
+    }
+
+    function stopBgmEngine() {
+      if (bgmSchedulerTimer) {
+        clearInterval(bgmSchedulerTimer);
+        bgmSchedulerTimer = null;
+      }
+      stopCustomBgmSource();
+    }
+
+    function setBgmEnabled(enable) {
+      isBgmPlaying = Boolean(enable);
+      if (isBgmPlaying) {
+        ensureAudioCtx();
+        startBgmEngineIfNeeded();
+      } else {
+        stopBgmEngine();
+      }
+      syncBgmUI();
+    }
+
+    // Backwards-compatible alias
+    function toggleBgm(enable) {
+      setBgmEnabled(enable);
+    }
+
+    function toggleBgmButton() {
+      setBgmEnabled(!isBgmPlaying);
+    }
+
+    function selectBgmTrack(trackIdx) {
+      currentBgmTrackIdx = trackIdx;
+      bgmCurrentStep = 0;
+      isBgmPlaying = true;
+      stopBgmEngine();
+      ensureAudioCtx();
+      startBgmEngineIfNeeded();
+      syncBgmUI();
+    }
+
+    function cycleBgmTrack() {
+      const total = customBgmBuffer ? 4 : 3;
+      const nextIdx = (currentBgmTrackIdx + 1) % total;
+      selectBgmTrack(nextIdx);
+    }
+
+    function setBgmVolume(vol) {
+      bgmVolume = Math.max(0, Math.min(1, vol));
+      if (bgmMasterGain && audioCtx) {
+        bgmMasterGain.gain.setTargetAtTime(bgmVolume, audioCtx.currentTime, 0.04);
+      }
+      const pct = `${Math.round(bgmVolume * 100)}%`;
+      const s1 = document.getElementById('bgm-volume-slider');
+      const s2 = document.getElementById('cfg-bgm-slider');
+      const l1 = document.getElementById('bgm-vol-label');
+      const l2 = document.getElementById('cfg-bgm-vol-label');
+      if (s1) s1.value = Math.round(bgmVolume * 100);
+      if (s2) s2.value = Math.round(bgmVolume * 100);
+      if (l1) l1.textContent = pct;
+      if (l2) l2.textContent = pct;
+    }
+
+    async function handleCustomBgmFile(inputEl) {
+      const file = inputEl && inputEl.files && inputEl.files[0];
+      if (!file) return;
+      try {
+        ensureAudioCtx();
+        const arrBuf = await file.arrayBuffer();
+        customBgmBuffer = await audioCtx.decodeAudioData(arrBuf);
+        customBgmName = file.name.replace(/\.[^.]+$/, '').slice(0, 14) || 'カスタム曲';
+        selectBgmTrack(3);
+      } catch (e) {
+        alert('音声ファイルの読み込みに失敗しました（MP3 / WAV / OGG 等をお試しください）');
+      }
+      inputEl.value = '';
+    }
+
+    // Subtle BGM ducking during character speech so voices stay crisp
+    let bgmDuckTimer = null;
+    function duckBgmBriefly(durationMs = 1800) {
+      if (!isBgmPlaying || !bgmMasterGain || !audioCtx) return;
+      const now = audioCtx.currentTime;
+      bgmMasterGain.gain.cancelScheduledValues(now);
+      bgmMasterGain.gain.setTargetAtTime(bgmVolume * 0.55, now, 0.05);
+      if (bgmDuckTimer) clearTimeout(bgmDuckTimer);
+      bgmDuckTimer = setTimeout(() => {
+        if (bgmMasterGain && audioCtx) {
+          bgmMasterGain.gain.setTargetAtTime(bgmVolume, audioCtx.currentTime, 0.18);
+        }
+      }, durationMs);
+    }
+
+    function syncBgmUI() {
+      const trackName = currentBgmTrackIdx === 3
+        ? customBgmName
+        : (BGM_TRACKS[currentBgmTrackIdx]?.name || '陽だまり茶屋');
+
+      // Desktop header button
+      const btn = document.getElementById('btn-bgm');
+      const icon = document.getElementById('bgm-icon');
+      const label = document.getElementById('bgm-label');
+      if (btn && icon && label) {
+        if (isBgmPlaying) {
+          btn.className = 'bg-emerald-700/85 hover:bg-emerald-600 text-white px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition shadow';
+          icon.className = 'fa-solid fa-music';
+          label.textContent = `BGM: ${trackName}`;
+        } else {
+          btn.className = 'bg-stone-800 hover:bg-stone-700 text-stone-400 px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition';
+          icon.className = 'fa-solid fa-volume-xmark';
+          label.textContent = 'BGM OFF';
+        }
+      }
+
+      // Mobile header icon button
+      const mBtn = document.getElementById('mobile-btn-bgm');
+      const mIcon = document.getElementById('mobile-bgm-icon');
+      if (mBtn && mIcon) {
+        mBtn.className = isBgmPlaying
+          ? 'w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-emerald-700/85 border border-emerald-400/60 text-white flex items-center justify-center text-xs shadow'
+          : 'w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-stone-800 border border-stone-600 text-stone-400 flex items-center justify-center text-xs shadow';
+        mIcon.className = isBgmPlaying ? 'fa-solid fa-music' : 'fa-solid fa-volume-xmark';
+      }
+
+      // Recording modal checkbox
+      const recChk = document.getElementById('toggle-bgm');
+      if (recChk) recChk.checked = isBgmPlaying;
+
+      // Mobile drawer & Config modal track buttons
+      [0, 1, 2].forEach(idx => {
+        const active = isBgmPlaying && currentBgmTrackIdx === idx;
+        const mb = document.getElementById(`m-bgm-${idx}`);
+        const cb = document.getElementById(`cfg-bgm-${idx}`);
+        if (mb) mb.className = `py-1.5 px-1 rounded-lg font-bold truncate ${active ? 'bg-emerald-600 text-white shadow' : 'bg-stone-800 text-stone-300'}`;
+        if (cb) cb.className = `py-2 px-2 rounded-xl font-bold transition ${active ? 'bg-emerald-600 text-white shadow' : 'bg-stone-900 text-stone-300 hover:bg-stone-700'}`;
+      });
+      const mOff = document.getElementById('m-bgm-off');
+      const cOff = document.getElementById('cfg-bgm-off');
+      if (mOff) mOff.className = `py-1.5 px-1 rounded-lg font-bold truncate ${!isBgmPlaying ? 'bg-rose-700 text-white shadow' : 'bg-stone-800 text-stone-400'}`;
+      if (cOff) cOff.className = `py-2 px-2 rounded-xl font-bold transition ${!isBgmPlaying ? 'bg-rose-700 text-white shadow' : 'bg-stone-900 text-stone-400 hover:bg-stone-700'}`;
+    }
+
+    // Unlock AudioContext & start BGM on first user touch/click anywhere on the page
+    ['pointerdown', 'touchstart', 'keydown'].forEach(evtName => {
+      window.addEventListener(evtName, () => {
+        if (!audioCtx || audioCtx.state === 'suspended') {
+          ensureAudioCtx();
+        } else if (isBgmPlaying && !bgmSchedulerTimer && !customBgmSource) {
+          startBgmEngineIfNeeded();
+        }
+      }, { passive: true });
+    });
 
     // Wooden Shogi piece clack ("パチッ" / "カラカラ") routed to both speakers & recording stream
     function playWoodClack(intensity = 0.7, pitchShift = 1.0) {
@@ -1075,41 +1828,6 @@
       }
     }
 
-    // Optional Japanese Tabletop Pentatonic BGM (routed into masterAudioGain so it also records!)
-    function toggleBgm(enable) {
-      isBgmPlaying = enable;
-      if (bgmInterval) {
-        clearInterval(bgmInterval);
-        bgmInterval = null;
-      }
-      if (!enable) return;
-
-      ensureAudioCtx();
-      // Miyako-bushi / Yo pentatonic scale notes (D4, E4, G4, A4, B4, D5, E5)
-      const scale = [293.66, 329.63, 392.00, 440.00, 493.88, 587.33, 659.25];
-      let step = 0;
-      bgmInterval = setInterval(() => {
-        if (!isBgmPlaying || !audioCtx) return;
-        const out = getAudioOutputNode();
-        if (!out) return;
-        const now = audioCtx.currentTime;
-        const note = scale[(step * 2 + (step % 3)) % scale.length];
-        step++;
-
-        // Koto/Shamisen pluck envelope
-        const osc = audioCtx.createOscillator();
-        const g = audioCtx.createGain();
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(note, now);
-        g.gain.setValueAtTime(0.055, now);
-        g.gain.exponentialRampToValueAtTime(0.0008, now + 0.32);
-        osc.connect(g);
-        g.connect(out);
-        osc.start(now);
-        osc.stop(now + 0.34);
-      }, 360);
-    }
-
     // Optional Microphone / Speaker Loopback Mix into Recording Stream
     async function toggleMicMix() {
       const btn = document.getElementById('btn-mic-mix');
@@ -1186,7 +1904,7 @@
       avatarEl.style.backgroundColor = char.ringColor + '33';
       avatarEl.style.borderColor = char.ringColor;
       nameEl.textContent = char.name;
-      nameEl.className = `font-black text-xs sm:text-sm px-2.5 py-0.5 rounded-full ${char.badgeBg}`;
+      nameEl.className = `font-black text-[10px] sm:text-xs px-2 py-0.5 rounded-full ${char.badgeBg}`;
       subEl.textContent = customSlotIdx !== null ? `P${customSlotIdx + 1} (${CORNER_NAMES[customSlotIdx]})` : char.styleDesc;
       textEl.textContent = `「${line}」`;
 
@@ -1195,18 +1913,17 @@
       speechBannerTimer = setTimeout(() => {
         banner.classList.add('hidden');
         activeSpeechOverlay.visible = false;
-      }, 4200 / gameSpeed);
+      }, 3600 / gameSpeed);
 
       if (!voiceEnabled) return line;
 
+      duckBgmBriefly(1600);
       const cleanText = line.replace(/[♡ｗ]/g, '').replace(/ｗｗ+/g, 'わらわら');
 
       if (voiceRecMode === 'synth') {
-        // Play Formant Vocal Synth to BOTH speakers and recording stream
         if ('speechSynthesis' in window) window.speechSynthesis.cancel();
         playFormantVocalSynth(char, cleanText, category, true);
       } else if (voiceRecMode === 'voicevox') {
-        // Try local VOICEVOX first; fallback to Hybrid if not running
         trySpeakVoicevox(char, cleanText).then((ok) => {
           if (!ok) {
             triggerWebSpeechUtterance(char, cleanText);
@@ -1214,7 +1931,6 @@
           }
         });
       } else {
-        // 'hybrid' (default): Web Speech API for live speakers + Formant Vocal Synth piped into the recorded video stream!
         const spokeWebSpeech = triggerWebSpeechUtterance(char, cleanText);
         playFormantVocalSynth(char, cleanText, category, !spokeWebSpeech);
       }
@@ -1246,15 +1962,22 @@
       const btn = document.getElementById('btn-voice');
       const icon = document.getElementById('voice-icon');
       const label = document.getElementById('voice-label');
+      const mBtn = document.getElementById('mobile-btn-voice');
+      const mIcon = document.getElementById('mobile-voice-icon');
+
       if (voiceEnabled) {
-        btn.className = 'bg-amber-700/80 hover:bg-amber-600 border border-amber-400/60 text-white px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition shadow';
-        icon.className = 'fa-solid fa-volume-high';
-        label.textContent = '声 ON';
+        if (btn) btn.className = 'bg-amber-700/80 hover:bg-amber-600 border border-amber-400/60 text-white px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition shadow';
+        if (icon) icon.className = 'fa-solid fa-volume-high';
+        if (label) label.textContent = '声 ON';
+        if (mBtn) mBtn.className = 'w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-amber-700/85 border border-amber-400/60 text-white flex items-center justify-center text-xs shadow';
+        if (mIcon) mIcon.className = 'fa-solid fa-volume-high';
       } else {
         if ('speechSynthesis' in window) window.speechSynthesis.cancel();
-        btn.className = 'bg-stone-800 hover:bg-stone-700 border border-stone-600 text-stone-400 px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition shadow';
-        icon.className = 'fa-solid fa-volume-xmark';
-        label.textContent = '声 OFF';
+        if (btn) btn.className = 'bg-stone-800 hover:bg-stone-700 border border-stone-600 text-stone-400 px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition shadow';
+        if (icon) icon.className = 'fa-solid fa-volume-xmark';
+        if (label) label.textContent = '声 OFF';
+        if (mBtn) mBtn.className = 'w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-stone-800 border border-stone-600 text-stone-400 flex items-center justify-center text-xs shadow';
+        if (mIcon) mIcon.className = 'fa-solid fa-volume-xmark';
       }
     }
 
@@ -1747,14 +2470,14 @@
 
         scene.add(group);
 
-        // Floating HTML Badge Label
+        // Floating HTML Badge Label (compact on small mobile screens to keep board clear)
         const labelEl = document.createElement('div');
         labelEl.className = 'piece-label flex flex-col items-center';
         labelEl.innerHTML = `
-          <div class="px-2 py-0.5 rounded-full text-[11px] font-black shadow-md border border-white/40 flex items-center gap-1 ${char.badgeBg}">
+          <div class="px-1.5 py-0.5 sm:px-2 rounded-full text-[10px] sm:text-[11px] font-black shadow-md border border-white/40 flex items-center gap-0.5 sm:gap-1 ${char.badgeBg}">
             <span>${char.avatar}</span>
-            <span>${char.name}</span>
-            <span class="bg-black/30 px-1.5 rounded text-[10px] serif-jp" id="label-rank-${idx}">${rankObj.short}</span>
+            <span class="hidden sm:inline">${char.name}</span>
+            <span class="bg-black/30 px-1 sm:px-1.5 rounded text-[9px] sm:text-[10px] serif-jp" id="label-rank-${idx}">${rankObj.short}</span>
           </div>
           <div class="w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-white/80"></div>
         `;
@@ -1788,10 +2511,10 @@
 
       // Update floating label
       token.labelEl.innerHTML = `
-        <div class="px-2 py-0.5 rounded-full text-[11px] font-black shadow-md border border-white/40 flex items-center gap-1 ${char.badgeBg}">
+        <div class="px-1.5 py-0.5 sm:px-2 rounded-full text-[10px] sm:text-[11px] font-black shadow-md border border-white/40 flex items-center gap-0.5 sm:gap-1 ${char.badgeBg}">
           <span>${char.avatar}</span>
-          <span>${char.name}</span>
-          <span class="bg-black/30 px-1.5 rounded text-[10px] serif-jp">${rankObj.short}</span>
+          <span class="hidden sm:inline">${char.name}</span>
+          <span class="bg-black/30 px-1 sm:px-1.5 rounded text-[9px] sm:text-[10px] serif-jp">${rankObj.short}</span>
         </div>
         <div class="w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-white/80"></div>
       `;
@@ -2219,7 +2942,11 @@
       const speeds = [1.0, 1.5, 2.0];
       const nextIdx = (speeds.indexOf(gameSpeed) + 1) % speeds.length;
       gameSpeed = speeds[nextIdx];
-      document.getElementById('speed-label').textContent = `${gameSpeed.toFixed(1)}x`;
+      const txt = `${gameSpeed.toFixed(1)}x`;
+      const s1 = document.getElementById('speed-label');
+      const s2 = document.getElementById('mobile-speed-label');
+      if (s1) s1.textContent = txt;
+      if (s2) s2.textContent = txt;
     }
 
     async function executeBoardMovement(pIdx, steps) {
@@ -2384,6 +3111,28 @@
       return { x: vec.x, z: vec.z };
     }
 
+    function isDesktopFullLayout() {
+      return window.innerWidth >= 1024 && window.innerHeight >= 580;
+    }
+
+    function toggleMobileMenu(forceState) {
+      const drawer = document.getElementById('mobile-menu-drawer');
+      const icon = document.getElementById('mobile-menu-icon');
+      if (!drawer) return;
+      const shouldShow = typeof forceState === 'boolean' ? forceState : drawer.classList.contains('hidden');
+      drawer.classList.toggle('hidden', !shouldShow);
+      if (icon) {
+        icon.className = shouldShow ? 'fa-solid fa-xmark' : 'fa-solid fa-bars';
+      }
+    }
+
+    function toggleLegendPopover(forceState) {
+      const pop = document.getElementById('mobile-legend-popover');
+      if (!pop) return;
+      const shouldShow = typeof forceState === 'boolean' ? forceState : pop.classList.contains('hidden');
+      pop.classList.toggle('hidden', !shouldShow);
+    }
+
     function renderPlayerCards() {
       const bar = document.getElementById('player-cards-bar');
       if (!bar) return;
@@ -2394,42 +3143,81 @@
         const isTurn = idx === currentTurnIdx && gameState !== 'GAMEOVER';
         const rankObj = ranks[Math.min(p.rankIdx, ranks.length - 1)];
         const remSquares = (p.startSq - p.currentSq + 32) % 32 || 32;
+        const isOff = p.control === 'off';
 
-        const onbuBadge = p.ridingOn !== null
+        const onbuBadgeDesktop = p.ridingOn !== null
           ? `<span class="bg-pink-600/80 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold">P${p.ridingOn + 1}におんぶ中</span>`
           : (p.rider !== null
             ? `<span class="bg-amber-600/80 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold">P${p.rider + 1}を運搬中</span>`
             : `<span class="text-[10px] text-stone-400">昇格まで残り<strong class="text-amber-300 ml-0.5">${remSquares}</strong>マス</span>`);
 
-        const controlBadge = p.control === 'human'
-          ? `<button onclick="togglePlayerControl(${idx})" class="bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] px-2 py-0.5 rounded-md font-black transition shadow" title="クリックで人間/CPU切替">👤 人間</button>`
-          : `<button onclick="togglePlayerControl(${idx})" class="bg-sky-700 hover:bg-sky-600 text-sky-100 text-[10px] px-2 py-0.5 rounded-md font-black transition shadow" title="クリックで人間/CPU切替">🤖 CPU</button>`;
+        const onbuCompactText = isOff
+          ? `<span class="text-[9px] text-stone-500">OFF</span>`
+          : (p.ridingOn !== null
+            ? `<span class="text-[9px] text-pink-300 font-bold truncate">乗P${p.ridingOn + 1}</span>`
+            : (p.rider !== null
+              ? `<span class="text-[9px] text-amber-300 font-bold truncate">運P${p.rider + 1}</span>`
+              : `<span class="text-[9px] text-stone-300 truncate">残<strong class="text-amber-300">${remSquares}</strong></span>`));
+
+        const controlBadgeDesktop = isOff
+          ? `<span class="bg-stone-800 text-stone-500 text-[10px] px-2 py-0.5 rounded-md font-bold">不参加</span>`
+          : (p.control === 'human'
+            ? `<button onclick="togglePlayerControl(${idx})" class="bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] px-2 py-0.5 rounded-md font-black transition shadow" title="タップで人間/CPU切替">👤 人間</button>`
+            : `<button onclick="togglePlayerControl(${idx})" class="bg-sky-700 hover:bg-sky-600 text-sky-100 text-[10px] px-2 py-0.5 rounded-md font-black transition shadow" title="タップで人間/CPU切替">🤖 CPU</button>`);
+
+        const controlBadgeMobile = isOff
+          ? ''
+          : (p.control === 'human'
+            ? `<button onclick="togglePlayerControl(${idx})" class="bg-emerald-600 active:bg-emerald-500 text-white text-[9px] px-1 py-0.2 rounded font-black shrink-0" title="タップで人間/CPU切替">👤</button>`
+            : `<button onclick="togglePlayerControl(${idx})" class="bg-sky-700 active:bg-sky-600 text-sky-100 text-[9px] px-1 py-0.2 rounded font-black shrink-0" title="タップで人間/CPU切替">🤖</button>`);
 
         return `
-          <div class="rounded-2xl p-2.5 transition-all border ${
+          <div class="rounded-xl lg:rounded-2xl transition-all border ${
             isTurn
-              ? 'bg-gradient-to-r from-amber-950/95 via-stone-900/95 to-stone-900/95 border-amber-400 shadow-[0_0_20px_rgba(251,191,36,0.35)] scale-[1.01]'
-              : 'bg-stone-900/80 border-stone-700/70 opacity-90'
-          } backdrop-blur-md flex items-center justify-between gap-2">
-            <div class="flex items-center gap-2.5 min-w-0">
-              <button onclick="speakCharacter('${p.charId}', 'turnStart', ${idx})" class="w-10 h-10 rounded-xl flex items-center justify-center text-xl shrink-0 border shadow-inner transition hover:scale-105" style="background-color: ${char.ringColor}28; border-color: ${char.ringColor};" title="クリックでボイス再生">
-                ${char.avatar}
-              </button>
-              <div class="min-w-0">
-                <div class="flex items-center gap-1.5 flex-wrap">
-                  <span class="text-xs font-black text-white truncate">P${idx + 1}: ${char.name}</span>
-                  ${controlBadge}
+              ? 'bg-gradient-to-b lg:bg-gradient-to-r from-amber-950/95 via-stone-900/95 to-stone-900/95 border-amber-400 shadow-[0_0_16px_rgba(251,191,36,0.4)]'
+              : 'bg-stone-900/82 border-stone-700/70 opacity-90'
+          } backdrop-blur-md">
+            <!-- DESKTOP CARD -->
+            <div class="desktop-ui p-2.5 items-center justify-between gap-2 w-full">
+              <div class="flex items-center gap-2.5 min-w-0">
+                <button onclick="speakCharacter('${p.charId}', 'turnStart', ${idx})" class="w-10 h-10 rounded-xl flex items-center justify-center text-xl shrink-0 border shadow-inner transition hover:scale-105" style="background-color: ${char.ringColor}28; border-color: ${char.ringColor};" title="クリックでボイス再生">
+                  ${char.avatar}
+                </button>
+                <div class="min-w-0">
+                  <div class="flex items-center gap-1.5 flex-wrap">
+                    <span class="text-xs font-black text-white truncate">P${idx + 1}: ${char.name}</span>
+                    ${controlBadgeDesktop}
+                  </div>
+                  <div class="flex items-center gap-1.5 mt-0.5">
+                    ${onbuBadgeDesktop}
+                  </div>
                 </div>
-                <div class="flex items-center gap-1.5 mt-0.5">
-                  ${onbuBadge}
+              </div>
+              <div class="flex flex-col items-end shrink-0">
+                <div class="px-2.5 py-1 rounded-xl bg-gradient-to-b from-amber-300 to-amber-600 text-stone-950 font-black text-sm serif-jp shadow border border-amber-200">
+                  ${rankObj.kanji}
                 </div>
+                <span class="text-[9px] text-stone-400 mt-0.5">${CORNER_NAMES[idx]}</span>
               </div>
             </div>
-            <div class="flex flex-col items-end shrink-0">
-              <div class="px-2.5 py-1 rounded-xl bg-gradient-to-b from-amber-300 to-amber-600 text-stone-950 font-black text-sm serif-jp shadow border border-amber-200">
-                ${rankObj.kanji}
+
+            <!-- MOBILE / COMPACT 4-COLUMN SLIM CARD (Zero name truncation even at 360px!) -->
+            <div class="compact-ui flex-col justify-between px-1.5 py-1 sm:px-2 sm:py-1.5 gap-1 w-full">
+              <div class="flex items-center gap-1 min-w-0">
+                <button onclick="speakCharacter('${p.charId}', 'turnStart', ${idx})" class="w-4 h-4 sm:w-6 sm:h-6 rounded-md flex items-center justify-center text-[10px] sm:text-sm shrink-0 border" style="background-color: ${char.ringColor}30; border-color: ${char.ringColor};" title="タップでボイス">
+                  ${char.avatar}
+                </button>
+                <span class="text-[9.5px] sm:text-xs font-black text-white leading-none truncate tracking-tight">${char.name}</span>
               </div>
-              <span class="text-[9px] text-stone-400 mt-0.5">${CORNER_NAMES[idx]}</span>
+              <div class="flex items-center justify-between gap-0.5">
+                <div class="flex items-center gap-1 min-w-0">
+                  ${controlBadgeMobile}
+                  ${onbuCompactText}
+                </div>
+                <span class="px-1.5 py-0.2 rounded bg-gradient-to-b from-amber-300 to-amber-600 text-stone-950 font-black text-[10px] sm:text-xs serif-jp leading-tight shrink-0 shadow">
+                  ${rankObj.short}
+                </span>
+              </div>
             </div>
           </div>
         `;
@@ -2469,7 +3257,7 @@
       const canHumanThrow = gameState === 'IDLE' && p.control === 'human';
       if (gameState === 'IDLE') {
         if (p.control === 'human') {
-          instEl.innerHTML = `<i class="fa-solid fa-hand-pointer text-amber-400 mr-1"></i>盤面をスワイプして投げるか、右の投擲ボタンを押してください`;
+          instEl.innerHTML = `<i class="fa-solid fa-hand-pointer text-amber-400 mr-1"></i>盤面を上へスワイプ、またはボタンで投擲！`;
         } else {
           instEl.innerHTML = `<i class="fa-solid fa-robot text-sky-400 mr-1"></i>CPU（${char.name}）が金将を構えています…`;
         }
@@ -2480,8 +3268,19 @@
       }
 
       if (humanBtns) {
-        humanBtns.style.opacity = canHumanThrow ? '1' : '0.4';
-        humanBtns.style.pointerEvents = canHumanThrow ? 'auto' : 'none';
+        if (canHumanThrow) {
+          humanBtns.classList.remove('hidden');
+          humanBtns.style.opacity = '1';
+          humanBtns.style.pointerEvents = 'auto';
+        } else if (isDesktopFullLayout()) {
+          humanBtns.classList.remove('hidden');
+          humanBtns.style.opacity = '0.4';
+          humanBtns.style.pointerEvents = 'none';
+        } else {
+          // Collapse action buttons on mobile during CPU turns / rolling to maximize 3D board view!
+          humanBtns.classList.add('hidden');
+          humanBtns.style.pointerEvents = 'none';
+        }
       }
     }
 
@@ -2566,103 +3365,251 @@
     }
 
     /**************************************************************************
-     * 14. SWIPE TO THROW & INTERACTIVE 3D CAMERA CONTROLS
+     * 14. MOBILE-OPTIMIZED SWIPE TO THROW, PINCH ZOOM & 3D CAMERA FRAMING
      **************************************************************************/
-    let isPointerDown = false;
+    const activePointers = new Map();
+    let primaryPointerId = null;
     let pointerStartX = 0;
     let pointerStartY = 0;
     let isSwipeAiming = false;
+    let lastPinchDist = 0;
+    let lastPinchMidX = 0;
+    let lastPinchMidY = 0;
+
     let cameraOrbitAngle = 0;
     let cameraPitchOffset = 0;
+    let cameraUserZoom = 1.0; // Pinch / wheel zoom multiplier (0.72 .. 1.45)
 
     const swipeSvg = document.getElementById('swipe-svg');
     const swipeLine = document.getElementById('swipe-line');
     const swipeStartCircle = document.getElementById('swipe-start');
     const swipeEndCircle = document.getElementById('swipe-end');
+    const swipeBadgeGroup = document.getElementById('swipe-badge-group');
+    const swipeBadgeBg = document.getElementById('swipe-badge-bg');
+    const swipeBadgeText = document.getElementById('swipe-badge-text');
+
+    function getSwipeRefDist() {
+      // Ergonomic swipe distance scaled to screen size (~125px on phones, ~195px on desktop)
+      return Math.max(115, Math.min(200, Math.min(window.innerWidth, window.innerHeight) * 0.34));
+    }
+
+    function cancelSwipeAim() {
+      isSwipeAiming = false;
+      swipeSvg.classList.add('hidden');
+    }
+
+    function updateSwipeVisuals(curX, curY) {
+      swipeEndCircle.setAttribute('cx', curX);
+      swipeEndCircle.setAttribute('cy', curY);
+      swipeLine.setAttribute('x2', curX);
+      swipeLine.setAttribute('y2', curY);
+
+      const dx = curX - pointerStartX;
+      const dy = curY - pointerStartY;
+      const dist = Math.hypot(dx, dy);
+
+      const bx = Math.max(58, Math.min(window.innerWidth - 58, curX));
+      const by = Math.max(52, curY);
+      swipeBadgeGroup.setAttribute('transform', `translate(${bx},${by})`);
+
+      if (dist <= 26) {
+        swipeBadgeText.textContent = '指を離すとキャンセル';
+        swipeBadgeBg.setAttribute('width', '128');
+        swipeBadgeBg.setAttribute('x', '-64');
+        swipeBadgeBg.setAttribute('stroke', '#a8a29e');
+      } else {
+        const power = Math.min(1.45, Math.max(0.68, dist / getSwipeRefDist()));
+        const pct = Math.round(power * 100);
+        swipeBadgeText.textContent = power >= 1.25 ? `🔥 強投げ ${pct}%` : `🎲 強さ ${pct}%`;
+        swipeBadgeBg.setAttribute('width', '112');
+        swipeBadgeBg.setAttribute('x', '-56');
+        swipeBadgeBg.setAttribute('stroke', power >= 1.25 ? '#f87171' : '#fbbf24');
+      }
+    }
 
     renderer.domElement.addEventListener('pointerdown', (e) => {
       ensureAudioCtx();
-      isPointerDown = true;
+      // Close mobile popovers when touching the 3D board
+      toggleMobileMenu(false);
+
+      activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+      // Multi-touch (2 fingers): switch immediately to pinch-zoom + 2-finger camera orbit!
+      if (activePointers.size >= 2) {
+        cancelSwipeAim();
+        const pts = Array.from(activePointers.values());
+        lastPinchDist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+        lastPinchMidX = (pts[0].x + pts[1].x) * 0.5;
+        lastPinchMidY = (pts[0].y + pts[1].y) * 0.5;
+        return;
+      }
+
+      primaryPointerId = e.pointerId;
       pointerStartX = e.clientX;
       pointerStartY = e.clientY;
 
       const activePlayer = players[currentTurnIdx];
-      if (gameState === 'IDLE' && activePlayer && activePlayer.control === 'human' && e.button === 0) {
+      const isPrimaryTouchOrLeftClick = e.pointerType === 'touch' || e.button === 0;
+      if (gameState === 'IDLE' && activePlayer && activePlayer.control === 'human' && isPrimaryTouchOrLeftClick) {
         isSwipeAiming = true;
         swipeSvg.classList.remove('hidden');
         swipeStartCircle.setAttribute('cx', pointerStartX);
         swipeStartCircle.setAttribute('cy', pointerStartY);
-        swipeEndCircle.setAttribute('cx', pointerStartX);
-        swipeEndCircle.setAttribute('cy', pointerStartY);
-        swipeLine.setAttribute('x1', pointerStartX);
-        swipeLine.setAttribute('y1', pointerStartY);
-        swipeLine.setAttribute('x2', pointerStartX);
-        swipeLine.setAttribute('y2', pointerStartY);
+        updateSwipeVisuals(pointerStartX, pointerStartY);
       } else {
         isSwipeAiming = false;
       }
     });
 
     window.addEventListener('pointermove', (e) => {
-      if (!isPointerDown) return;
+      if (!activePointers.has(e.pointerId)) return;
+      activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+      if (activePointers.size >= 2) {
+        const pts = Array.from(activePointers.values());
+        const dist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+        const midX = (pts[0].x + pts[1].x) * 0.5;
+        const midY = (pts[0].y + pts[1].y) * 0.5;
+
+        if (lastPinchDist > 10) {
+          const ratio = lastPinchDist / Math.max(10, dist);
+          cameraUserZoom = Math.max(0.70, Math.min(1.45, cameraUserZoom * ratio));
+        }
+        const dMidX = midX - lastPinchMidX;
+        const dMidY = midY - lastPinchMidY;
+        cameraOrbitAngle -= dMidX * 0.007;
+        cameraPitchOffset = Math.max(-0.42, Math.min(0.45, cameraPitchOffset + dMidY * 0.0045));
+
+        lastPinchDist = dist;
+        lastPinchMidX = midX;
+        lastPinchMidY = midY;
+        return;
+      }
+
+      if (e.pointerId !== primaryPointerId) return;
       const dx = e.clientX - pointerStartX;
       const dy = e.clientY - pointerStartY;
 
       if (isSwipeAiming) {
-        swipeEndCircle.setAttribute('cx', e.clientX);
-        swipeEndCircle.setAttribute('cy', e.clientY);
-        swipeLine.setAttribute('x2', e.clientX);
-        swipeLine.setAttribute('y2', e.clientY);
+        updateSwipeVisuals(e.clientX, e.clientY);
       } else {
-        // Orbit camera manually
-        cameraOrbitAngle -= dx * 0.006;
-        cameraPitchOffset = Math.max(-0.4, Math.min(0.4, cameraPitchOffset + dy * 0.004));
+        // 1-finger camera orbit during CPU turns or right-drag on desktop
+        cameraOrbitAngle -= dx * 0.0065;
+        cameraPitchOffset = Math.max(-0.42, Math.min(0.45, cameraPitchOffset + dy * 0.0045));
         pointerStartX = e.clientX;
         pointerStartY = e.clientY;
       }
     });
 
-    window.addEventListener('pointerup', (e) => {
-      if (!isPointerDown) return;
-      isPointerDown = false;
+    function handlePointerEnd(e, isCancelled = false) {
+      if (!activePointers.has(e.pointerId)) return;
+      activePointers.delete(e.pointerId);
 
-      if (isSwipeAiming) {
-        isSwipeAiming = false;
-        swipeSvg.classList.add('hidden');
+      if (isSwipeAiming && e.pointerId === primaryPointerId) {
+        const endX = e.clientX;
+        const endY = e.clientY;
+        cancelSwipeAim();
 
-        const dx = e.clientX - pointerStartX;
-        const dy = e.clientY - pointerStartY;
-        const dist = Math.hypot(dx, dy);
+        if (!isCancelled) {
+          const dx = endX - pointerStartX;
+          const dy = endY - pointerStartY;
+          const dist = Math.hypot(dx, dy);
 
-        if (dist > 28 && gameState === 'IDLE' && players[currentTurnIdx].control === 'human') {
-          // Convert screen swipe vector to camera-aligned horizontal world vector
-          const forward = new THREE.Vector3();
-          camera.getWorldDirection(forward);
-          forward.y = 0;
-          if (forward.lengthSq() < 0.001) forward.set(0, 0, -1);
-          forward.normalize();
+          if (dist > 26 && gameState === 'IDLE' && players[currentTurnIdx].control === 'human') {
+            const forward = new THREE.Vector3();
+            camera.getWorldDirection(forward);
+            forward.y = 0;
+            if (forward.lengthSq() < 0.001) forward.set(0, 0, -1);
+            forward.normalize();
 
-          const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
+            const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
 
-          const ndx = dx / dist;
-          const ndy = -dy / dist; // Upward screen swipe = forward in 3D space
+            const ndx = dx / dist;
+            const ndy = -dy / dist; // Upward screen swipe = forward into the board
 
-          const worldDir = new THREE.Vector3()
-            .addScaledVector(right, ndx)
-            .addScaledVector(forward, ndy)
-            .normalize();
+            const worldDir = new THREE.Vector3()
+              .addScaledVector(right, ndx)
+              .addScaledVector(forward, ndy)
+              .normalize();
 
-          const power = Math.min(1.45, Math.max(0.68, dist / 210));
-          const spin = 0.9 + Math.abs(ndx) * 0.85;
-          throwGoldPieces(worldDir.x, worldDir.z, power, spin, 1.0);
+            const power = Math.min(1.45, Math.max(0.68, dist / getSwipeRefDist()));
+            const spin = 0.9 + Math.abs(ndx) * 0.85;
+            throwGoldPieces(worldDir.x, worldDir.z, power, spin, 1.0);
+          }
         }
       }
-    });
+
+      if (activePointers.size === 1) {
+        const [remId, remPt] = activePointers.entries().next().value;
+        primaryPointerId = remId;
+        pointerStartX = remPt.x;
+        pointerStartY = remPt.y;
+      } else if (activePointers.size === 0) {
+        primaryPointerId = null;
+      }
+    }
+
+    window.addEventListener('pointerup', (e) => handlePointerEnd(e, false));
+    window.addEventListener('pointercancel', (e) => handlePointerEnd(e, true));
+
+    // Mouse wheel zoom support on PC
+    renderer.domElement.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      cameraUserZoom = Math.max(0.70, Math.min(1.45, cameraUserZoom + e.deltaY * 0.0008));
+    }, { passive: false });
+
+    function resetViewCamera() {
+      cameraOrbitAngle = 0;
+      cameraPitchOffset = 0;
+      cameraUserZoom = 1.0;
+    }
 
     function cycleCameraMode() {
       cameraMode = (cameraMode + 1) % 3;
       const labels = ['斜め俯瞰', '真上俯瞰', 'ダイナミック追従'];
-      document.getElementById('camera-label').textContent = labels[cameraMode];
+      const el = document.getElementById('camera-label');
+      if (el) el.textContent = labels[cameraMode];
+    }
+
+    // Compute adaptive FOV & camera distance scale so the entire 9x9 Shogi board + 4 corners fit cleanly on portrait & landscape phones!
+    function updateViewportProjection() {
+      const w = Math.max(1, window.innerWidth);
+      const h = Math.max(1, window.innerHeight);
+      const aspect = w / h;
+
+      // Expand vertical FOV smoothly on narrow portrait screens so horizontal FOV doesn't clip the board
+      const targetFov = aspect < 1.0
+        ? Math.min(66, 42 / Math.pow(Math.max(0.42, aspect), 0.55))
+        : 42;
+
+      if (Math.abs(camera.fov - targetFov) > 0.05 || Math.abs(camera.aspect - aspect) > 0.001) {
+        camera.fov = targetFov;
+        camera.aspect = aspect;
+        camera.updateProjectionMatrix();
+      }
+    }
+
+    function getViewportDistanceScale() {
+      const w = Math.max(1, window.innerWidth);
+      const h = Math.max(1, window.innerHeight);
+      const aspect = w / h;
+
+      // Exact geometric horizontal fit: diagonal half-span of 9x9 board + 4 corner tokens & labels is ~8.55 world units;
+      // default camera center distance is sqrt(14.2^2 + 12.6^2) = 18.98.
+      const vHalfRad = THREE.MathUtils.degToRad((camera.fov || 42) * 0.5);
+      const horizTan = Math.max(0.18, Math.tan(vHalfRad) * aspect);
+      const minScaleHoriz = (8.65 / horizTan) / 18.98;
+
+      // Vertical clearance scale so top cards & bottom controls don't obscure the North/South corner tokens
+      let minScaleVert = 1.15;
+      if (h < 500) {
+        minScaleVert = 1.24;
+      } else if (h < 680) {
+        minScaleVert = 1.18;
+      }
+
+      const distScale = Math.max(minScaleHoriz, minScaleVert);
+      return distScale * cameraUserZoom;
     }
 
     const cameraTargetPos = new THREE.Vector3(0, 13.5, 13.5);
@@ -2672,11 +3619,15 @@
     function updateCameraStep() {
       const cornerAngles = [Math.PI * 0.25, -Math.PI * 0.25, -Math.PI * 0.75, Math.PI * 0.75];
       const baseAngle = cornerAngles[currentTurnIdx] + cameraOrbitAngle;
+      const scale = getViewportDistanceScale();
+
+      // Keep atmospheric fog proportional so zoomed-out portrait boards remain bright and crisp
+      scene.fog.density = 0.017 / Math.max(1.0, scale * 0.92);
 
       if (cameraMode === 1) {
         // Top-Down Overview
-        cameraTargetPos.set(Math.sin(baseAngle) * 1.8, 19.5, Math.cos(baseAngle) * 1.8);
-        cameraLookAtTarget.set(0, 0, 0);
+        cameraTargetPos.set(Math.sin(baseAngle) * 1.8 * scale, 19.5 * scale, Math.cos(baseAngle) * 1.8 * scale);
+        cameraLookAtTarget.set(0, -0.15, 0);
       } else if (cameraMode === 2 || gameState === 'ROLLING') {
         // Dynamic Action Zoom
         if (gameState === 'ROLLING' || gameState === 'EVALUATING') {
@@ -2685,25 +3636,27 @@
             cx += gp.mesh.position.x * 0.25;
             cz += gp.mesh.position.z * 0.25;
           });
-          cameraTargetPos.set(cx + Math.sin(baseAngle) * 8.2, 8.8, cz + Math.cos(baseAngle) * 8.2);
-          cameraLookAtTarget.set(cx, 0.2, cz);
+          const rollScale = Math.max(0.95, scale * 0.86);
+          cameraTargetPos.set(cx + Math.sin(baseAngle) * 8.4 * rollScale, 9.0 * rollScale, cz + Math.cos(baseAngle) * 8.4 * rollScale);
+          cameraLookAtTarget.set(cx, 0.15, cz);
         } else if (gameState === 'MOVING') {
           const tokenPos = playerTokenGroups[currentTurnIdx].group.position;
-          cameraTargetPos.set(tokenPos.x + Math.sin(baseAngle) * 7.5, 7.5, tokenPos.z + Math.cos(baseAngle) * 7.5);
+          const moveScale = Math.max(0.95, scale * 0.85);
+          cameraTargetPos.set(tokenPos.x + Math.sin(baseAngle) * 7.8 * moveScale, 7.8 * moveScale, tokenPos.z + Math.cos(baseAngle) * 7.8 * moveScale);
           cameraLookAtTarget.copy(tokenPos);
         } else {
-          cameraTargetPos.set(Math.sin(baseAngle) * 12.2, 11.2 + cameraPitchOffset * 5, Math.cos(baseAngle) * 12.2);
-          cameraLookAtTarget.set(0, 0, 0);
+          cameraTargetPos.set(Math.sin(baseAngle) * 12.2 * scale, (11.4 + cameraPitchOffset * 5) * scale, Math.cos(baseAngle) * 12.2 * scale);
+          cameraLookAtTarget.set(0, -0.2, 0);
         }
       } else {
         // Diagonal Overview (Default)
-        const radius = 14.2;
-        const height = 12.4 + cameraPitchOffset * 6;
+        const radius = 14.2 * scale;
+        const height = (12.6 + cameraPitchOffset * 6) * scale;
         cameraTargetPos.set(Math.sin(baseAngle) * radius, height, Math.cos(baseAngle) * radius);
-        cameraLookAtTarget.set(0, -0.3, 0);
+        cameraLookAtTarget.set(0, -0.25, 0);
       }
 
-      camera.position.lerp(cameraTargetPos, 0.07);
+      camera.position.lerp(cameraTargetPos, 0.08);
       currentLookAt.lerp(cameraLookAtTarget, 0.1);
       camera.lookAt(currentLookAt);
     }
@@ -2716,11 +3669,16 @@
       const modes = ['real', 'entame', 'chaos'];
       modes.forEach(m => {
         const btn = document.getElementById(`assist-${m}`);
-        if (!btn) return;
-        if (m === mode) {
-          btn.className = 'px-2 py-1 rounded-lg font-bold transition bg-amber-600 text-white shadow';
-        } else {
-          btn.className = 'px-2 py-1 rounded-lg font-bold transition text-stone-400 hover:text-white';
+        const mBtn = document.getElementById(`m-assist-${m}`);
+        if (btn) {
+          btn.className = m === mode
+            ? 'px-2 py-1 rounded-lg font-bold transition bg-amber-600 text-white shadow'
+            : 'px-2 py-1 rounded-lg font-bold transition text-stone-400 hover:text-white';
+        }
+        if (mBtn) {
+          mBtn.className = m === mode
+            ? 'py-1 rounded-lg font-bold text-[11px] text-white bg-amber-600 shadow'
+            : 'py-1 rounded-lg font-bold text-[11px] text-stone-400 bg-stone-800';
         }
       });
     }
@@ -3145,18 +4103,32 @@
       const btn = document.getElementById('btn-record');
       const dot = document.getElementById('rec-dot');
       const txt = document.getElementById('rec-btn-text');
+      const mBtnTxt = document.getElementById('m-rec-btn-text');
+      const mInd = document.getElementById('mobile-rec-indicator');
+      const mTime = document.getElementById('mobile-rec-time');
 
       if (isRecording) {
         const sec = Math.floor((performance.now() - recStartTime) / 1000);
         const mm = String(Math.floor(sec / 60)).padStart(2, '0');
         const ss = String(sec % 60).padStart(2, '0');
-        btn.className = 'bg-red-600 hover:bg-red-500 border-2 border-yellow-300 text-white px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 transition shadow-[0_0_25px_rgba(239,68,68,0.9)] animate-pulse';
-        dot.className = 'w-2.5 h-2.5 rounded-sm bg-yellow-300 inline-block';
-        txt.textContent = `録画停止 (${mm}:${ss})`;
+        if (btn) btn.className = 'bg-red-600 hover:bg-red-500 border-2 border-yellow-300 text-white px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 transition shadow-[0_0_25px_rgba(239,68,68,0.9)] animate-pulse';
+        if (dot) dot.className = 'w-2.5 h-2.5 rounded-sm bg-yellow-300 inline-block';
+        if (txt) txt.textContent = `録画停止 (${mm}:${ss})`;
+        if (mBtnTxt) mBtnTxt.textContent = `録画停止 (${mm}:${ss})`;
+        if (mInd && !isDesktopFullLayout()) {
+          mInd.classList.remove('hidden');
+          mInd.classList.add('flex');
+        }
+        if (mTime) mTime.textContent = `${mm}:${ss}`;
       } else {
-        btn.className = 'bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-500 hover:to-rose-600 border border-red-300/70 text-white px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 transition shadow-[0_0_15px_rgba(239,68,68,0.5)]';
-        dot.className = 'w-2.5 h-2.5 rounded-full bg-white inline-block';
-        txt.textContent = '録画開始';
+        if (btn) btn.className = 'bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-500 hover:to-rose-600 border border-red-300/70 text-white px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 transition shadow-[0_0_15px_rgba(239,68,68,0.5)]';
+        if (dot) dot.className = 'w-2.5 h-2.5 rounded-full bg-white inline-block';
+        if (txt) txt.textContent = '録画開始';
+        if (mBtnTxt) mBtnTxt.textContent = '録画開始';
+        if (mInd) {
+          mInd.classList.add('hidden');
+          mInd.classList.remove('flex');
+        }
       }
     }
 
@@ -3182,7 +4154,11 @@
       };
 
       recordedClips.unshift(clip);
-      document.getElementById('clip-count-badge').textContent = String(recordedClips.length);
+      const cnt = String(recordedClips.length);
+      const b1 = document.getElementById('clip-count-badge');
+      const b2 = document.getElementById('m-clip-count-badge');
+      if (b1) b1.textContent = cnt;
+      if (b2) b2.textContent = cnt;
       selectRecordedClip(0);
       openRecordModal();
     }
@@ -3291,7 +4267,7 @@
         if (worldPos.z > 1) {
           token.labelEl.style.opacity = '0';
         } else {
-          const sx = (worldPos.x * halfW) + halfW;
+          const sx = Math.max(38, Math.min(window.innerWidth - 38, (worldPos.x * halfW) + halfW));
           const sy = -(worldPos.y * halfH) + halfH;
           token.labelEl.style.opacity = '1';
           token.labelEl.style.left = `${sx}px`;
@@ -3348,15 +4324,36 @@
       }
     }
 
-    window.addEventListener('resize', () => {
-      camera.aspect = window.innerWidth / window.innerHeight;
-      camera.updateProjectionMatrix();
+    function handleViewportResize() {
+      updateViewportProjection();
       renderer.setSize(window.innerWidth, window.innerHeight);
-    });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      updateTurnUI();
+      updateRecordingButtonUI();
+    }
+
+    window.addEventListener('resize', handleViewportResize);
+    window.addEventListener('orientationchange', () => setTimeout(handleViewportResize, 120));
 
     window.onload = function () {
+      // Hide PC tab-capture button on mobile browsers that do not support getDisplayMedia
+      const tabSec = document.getElementById('tab-capture-section');
+      if (tabSec && (!navigator.mediaDevices || typeof navigator.mediaDevices.getDisplayMedia !== 'function')) {
+        tabSec.classList.add('hidden');
+      }
+
+      updateViewportProjection();
+      syncBgmUI();
       initPlayerTokens();
       renderPlayerCards();
+
+      // Snap initial camera position immediately so portrait framing is crisp from frame 1
+      const initScale = getViewportDistanceScale();
+      camera.position.set(Math.sin(Math.PI * 0.25) * 14.2 * initScale, 12.6 * initScale, Math.cos(Math.PI * 0.25) * 14.2 * initScale);
+
+      // Attempt auto-starting BGM if browser allows immediate AudioContext; otherwise starts on first touch
+      try { ensureAudioCtx(); } catch (e) {}
+
       startTurn(0);
       animate();
     };
