@@ -1,0 +1,3365 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>3D金ころがし（まわり将棋）オールスターズ</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Three.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <!-- Cannon.js (3D Physics) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
+  <!-- FontAwesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;700;800;900&family=Noto+Serif+JP:wght@700;900&display=swap" rel="stylesheet" />
+
+  <style>
+    * {
+      user-select: none;
+      -webkit-user-select: none;
+      box-sizing: border-box;
+    }
+    body, html {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #14110e;
+      font-family: 'M PLUS Rounded 1c', sans-serif;
+    }
+    .serif-jp {
+      font-family: 'Noto Serif JP', serif;
+    }
+    #canvas-container {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+      touch-action: none;
+    }
+    #ui-layer {
+      position: absolute;
+      inset: 0;
+      z-index: 10;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .interactive {
+      pointer-events: auto;
+    }
+    /* Custom Animations */
+    @keyframes popIn {
+      0% { transform: scale(0.5) translateY(20px); opacity: 0; }
+      70% { transform: scale(1.06) translateY(-3px); opacity: 1; }
+      100% { transform: scale(1) translateY(0); opacity: 1; }
+    }
+    @keyframes floatPulse {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-5px); }
+    }
+    .animate-pop {
+      animation: popIn 0.35s cubic-bezier(0.18, 0.89, 0.32, 1.28) forwards;
+    }
+    .animate-float {
+      animation: floatPulse 2s ease-in-out infinite;
+    }
+    /* 3D Player Marker Labels */
+    .piece-label {
+      position: absolute;
+      transform: translate(-50%, -100%);
+      pointer-events: none;
+      transition: opacity 0.2s;
+      z-index: 5;
+      white-space: nowrap;
+    }
+    /* Scrollbar styling for modals */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(0, 0, 0, 0.2);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(217, 119, 6, 0.6);
+      border-radius: 9999px;
+    }
+  </style>
+</head>
+<body class="text-amber-50">
+
+  <!-- 3D Canvas Container -->
+  <div id="canvas-container"></div>
+
+  <!-- 3D Floating Labels Layer -->
+  <div id="labels-container" class="absolute inset-0 pointer-events-none overflow-hidden z-[5]"></div>
+
+  <!-- Swipe Aiming Vector Overlay -->
+  <svg id="swipe-svg" class="absolute inset-0 w-full h-full pointer-events-none z-[8] hidden">
+    <defs>
+      <linearGradient id="arrowGrad" x1="0%" y1="100%" x2="0%" y2="0%">
+        <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.3" />
+        <stop offset="100%" stop-color="#ef4444" stop-opacity="0.95" />
+      </linearGradient>
+    </defs>
+    <line id="swipe-line" x1="0" y1="0" x2="0" y2="0" stroke="url(#arrowGrad)" stroke-width="8" stroke-linecap="round" stroke-dasharray="10,6" />
+    <circle id="swipe-start" cx="0" cy="0" r="16" fill="rgba(245, 158, 11, 0.4)" stroke="#f59e0b" stroke-width="3" />
+    <circle id="swipe-end" cx="0" cy="0" r="12" fill="#ef4444" stroke="#fff" stroke-width="3" />
+  </svg>
+
+  <!-- Main UI Overlay -->
+  <div id="ui-layer" class="p-2 sm:p-4">
+
+    <!-- TOP BAR: Title, Player Cards, & Quick Settings -->
+    <div class="flex flex-col gap-2">
+      <div class="flex flex-wrap items-center justify-between gap-2 bg-stone-900/85 backdrop-blur-md border border-amber-700/50 rounded-2xl px-3 py-2 shadow-xl interactive">
+        <!-- Brand / Title -->
+        <div class="flex items-center gap-2.5">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 via-yellow-500 to-amber-700 flex items-center justify-center shadow-md border border-amber-200 text-stone-950 font-black text-xl serif-jp">
+            金
+          </div>
+          <div>
+            <h1 class="text-sm sm:text-base font-black tracking-tight text-amber-300 flex items-center gap-2">
+              <span>3D金ころがし</span>
+              <span class="text-[10px] sm:text-xs bg-amber-600/40 border border-amber-400/50 text-amber-200 px-2 py-0.5 rounded-full">まわり将棋</span>
+            </h1>
+            <p class="text-[11px] text-stone-400 hidden sm:block">4枚の金将を振って外周を進め！歩兵から王将へ昇格バトル</p>
+          </div>
+        </div>
+
+        <!-- Top Controls -->
+        <div class="flex flex-wrap items-center gap-1.5 sm:gap-2">
+          <!-- Standing Assist Mode Selector -->
+          <div class="flex items-center bg-stone-800/90 border border-stone-700 rounded-xl p-1 text-xs">
+            <span class="px-2 text-stone-400 hidden md:inline"><i class="fa-solid fa-wand-magic-sparkles text-amber-400 mr-1"></i>立ちやすさ:</span>
+            <button onclick="setAssistMode('real')" id="assist-real" class="px-2 py-1 rounded-lg font-bold transition text-stone-400 hover:text-white">リアル</button>
+            <button onclick="setAssistMode('entame')" id="assist-entame" class="px-2 py-1 rounded-lg font-bold transition bg-amber-600 text-white shadow">エンタメ</button>
+            <button onclick="setAssistMode('chaos')" id="assist-chaos" class="px-2 py-1 rounded-lg font-bold transition text-stone-400 hover:text-white">カオス</button>
+          </div>
+
+          <!-- Camera Mode Button -->
+          <button onclick="cycleCameraMode()" id="btn-camera" class="bg-stone-800 hover:bg-stone-700 border border-stone-600 text-amber-200 px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition shadow">
+            <i class="fa-solid fa-video text-amber-400"></i>
+            <span id="camera-label">斜め俯瞰</span>
+          </button>
+
+          <!-- Game Speed Selector -->
+          <button onclick="cycleGameSpeed()" id="btn-speed" class="bg-stone-800 hover:bg-stone-700 border border-stone-600 text-amber-200 px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1 transition shadow" title="ゲーム進行スピード切替">
+            <i class="fa-solid fa-gauge-high text-amber-400"></i>
+            <span id="speed-label">1.0x</span>
+          </button>
+
+          <!-- Voice Toggle -->
+          <button onclick="toggleVoice()" id="btn-voice" class="bg-amber-700/80 hover:bg-amber-600 border border-amber-400/60 text-white px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition shadow">
+            <i id="voice-icon" class="fa-solid fa-volume-high"></i>
+            <span id="voice-label" class="hidden sm:inline">声 ON</span>
+          </button>
+
+          <!-- Instant Record Toggle Button -->
+          <button onclick="toggleRecording()" id="btn-record" class="bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-500 hover:to-rose-600 border border-red-300/70 text-white px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 transition shadow-[0_0_15px_rgba(239,68,68,0.5)]">
+            <span id="rec-dot" class="w-2.5 h-2.5 rounded-full bg-white inline-block"></span>
+            <span id="rec-btn-text">録画開始</span>
+          </button>
+
+          <!-- Recording Studio & Clips Modal Button -->
+          <button onclick="openRecordModal()" id="btn-studio" class="bg-stone-800 hover:bg-stone-700 border border-rose-500/50 text-rose-200 px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition shadow">
+            <i class="fa-solid fa-clapperboard text-rose-400"></i>
+            <span>録画一覧</span>
+            <span id="clip-count-badge" class="bg-rose-600 text-white text-[10px] px-1.5 py-0.2 rounded-full font-black">0</span>
+          </button>
+
+          <!-- Rules & Player Config Modal Button -->
+          <button onclick="openConfigModal()" class="bg-stone-800 hover:bg-stone-700 border border-amber-500/50 text-amber-300 px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition shadow">
+            <i class="fa-solid fa-sliders"></i>
+            <span class="hidden md:inline">キャラ＆ルール設定</span>
+          </button>
+
+          <!-- Reset Match -->
+          <button onclick="resetMatch()" class="bg-red-900/70 hover:bg-red-800 border border-red-500/40 text-red-200 px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1 transition shadow" title="最初からやり直す">
+            <i class="fa-solid fa-rotate-right"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- 4 PLAYER STATUS CARDS -->
+      <div id="player-cards-bar" class="grid grid-cols-2 lg:grid-cols-4 gap-2 interactive">
+        <!-- Dynamically rendered via JS -->
+      </div>
+    </div>
+
+    <!-- CENTER OVERLAY: Speech Bubble Banner & Roll Result Banner -->
+    <div class="flex flex-col items-center justify-center my-auto pointer-events-none gap-3 px-2">
+      <!-- Character Speech Bubble -->
+      <div id="speech-banner" class="hidden max-w-xl w-full bg-stone-950/90 backdrop-blur-md border-2 border-amber-500 rounded-2xl p-3 sm:p-4 shadow-2xl animate-pop">
+        <div class="flex items-center gap-3">
+          <div id="speech-avatar" class="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center text-2xl sm:text-3xl shadow-inner shrink-0 border border-white/20">
+            ⚾
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 mb-0.5">
+              <span id="speech-name" class="font-black text-xs sm:text-sm px-2 py-0.5 rounded-full bg-amber-500 text-stone-950">おんJ民</span>
+              <span id="speech-sub" class="text-[11px] text-amber-300/80 font-bold">P1 (南角スタート)</span>
+            </div>
+            <p id="speech-text" class="text-white font-extrabold text-sm sm:text-lg leading-snug break-words">
+              「ワイのターンやな！いくでホンマ！」
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Dice / Gold Roll Result Pop-up -->
+      <div id="result-banner" class="hidden bg-gradient-to-b from-stone-900/95 to-stone-950/95 backdrop-blur-md border-2 border-yellow-400 rounded-3xl px-6 py-4 text-center shadow-[0_0_40px_rgba(245,158,11,0.5)] animate-pop">
+        <div id="result-badge" class="inline-block text-xs font-black tracking-widest uppercase px-3 py-0.5 rounded-full bg-yellow-500 text-stone-950 mb-1">
+          出目確定
+        </div>
+        <div id="result-title" class="text-3xl sm:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-200 via-amber-400 to-yellow-200 serif-jp drop-shadow">
+          8 マス進む！
+        </div>
+        <div id="result-breakdown" class="flex flex-wrap items-center justify-center gap-1.5 mt-2 text-xs sm:text-sm font-bold text-amber-200">
+          <!-- Piece breakdown pills -->
+        </div>
+      </div>
+    </div>
+
+    <!-- BOTTOM BAR: Human Throw Controls & Quick Guide -->
+    <div class="flex flex-col items-center gap-2">
+
+      <!-- Active Turn Control Panel -->
+      <div id="throw-panel" class="w-full max-w-2xl bg-stone-900/90 backdrop-blur-md border border-amber-500/60 rounded-2xl p-3 sm:p-4 shadow-2xl interactive transition-all">
+        <div class="flex flex-col sm:flex-row items-center justify-between gap-3">
+          <!-- Turn Indicator & Instruction -->
+          <div class="flex items-center gap-3 text-left w-full sm:w-auto">
+            <div id="turn-icon" class="w-11 h-11 rounded-xl bg-amber-500 text-stone-950 flex items-center justify-center text-2xl font-black shrink-0 shadow">
+              ⚾
+            </div>
+            <div>
+              <div class="flex items-center gap-2">
+                <span id="turn-player-label" class="font-black text-amber-300 text-sm sm:text-base">P1: おんJ民 の番</span>
+                <span id="turn-piece-badge" class="text-xs px-2 py-0.5 rounded bg-stone-800 border border-amber-500/40 text-amber-200 font-bold serif-jp">現在：歩兵</span>
+              </div>
+              <p id="turn-instruction" class="text-xs text-stone-300 mt-0.5">
+                <i class="fa-solid fa-hand-pointer text-amber-400 mr-1"></i>盤面を上にスワイプして投げるか、下の投擲ボタンを押してください
+              </p>
+            </div>
+          </div>
+
+          <!-- Action Buttons for Human Turn -->
+          <div id="human-buttons" class="grid grid-cols-2 sm:flex items-center gap-2 w-full sm:w-auto">
+            <button onclick="triggerHumanPresetThrow('normal')" class="bg-gradient-to-b from-amber-500 to-amber-700 hover:from-amber-400 hover:to-amber-600 text-stone-950 font-black px-3.5 py-2.5 rounded-xl text-xs sm:text-sm shadow-lg border border-amber-300 flex items-center justify-center gap-1.5 active:scale-95 transition">
+              <i class="fa-solid fa-dice"></i>
+              <span>標準投げ</span>
+            </button>
+            <button onclick="triggerHumanPresetThrow('spin')" class="bg-gradient-to-b from-pink-500 to-rose-700 hover:from-pink-400 hover:to-rose-600 text-white font-black px-3 py-2.5 rounded-xl text-xs sm:text-sm shadow-lg border border-pink-300 flex items-center justify-center gap-1.5 active:scale-95 transition" title="横回転をかけて横立ち(5点)を狙う">
+              <i class="fa-solid fa-arrows-spin"></i>
+              <span>スピン技巧</span>
+            </button>
+            <button onclick="triggerHumanPresetThrow('power')" class="bg-gradient-to-b from-red-600 to-amber-800 hover:from-red-500 hover:to-amber-700 text-white font-black px-3 py-2.5 rounded-xl text-xs sm:text-sm shadow-lg border border-red-400 flex items-center justify-center gap-1.5 active:scale-95 transition" title="強めに叩きつけて縦立ち(10点)・逆立ち(20点)を狙う（ションベン注意）">
+              <i class="fa-solid fa-fire"></i>
+              <span>豪快パワー</span>
+            </button>
+            <button onclick="triggerHumanPresetThrow('careful')" class="bg-gradient-to-b from-emerald-600 to-teal-800 hover:from-emerald-500 hover:to-teal-700 text-white font-black px-3 py-2.5 rounded-xl text-xs sm:text-sm shadow-lg border border-emerald-400 flex items-center justify-center gap-1.5 active:scale-95 transition" title="盤外落下を防ぐ慎重投げ（重なり注意）">
+              <i class="fa-solid fa-shield-halved"></i>
+              <span>慎重投げ</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Mini Scoring Legend Footer -->
+      <div class="bg-stone-950/85 backdrop-blur border border-stone-800 rounded-xl px-3 py-1.5 text-[11px] text-stone-300 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 interactive">
+        <span class="font-bold text-amber-400"><i class="fa-solid fa-book-open mr-1"></i>出目表:</span>
+        <span>表=<strong class="text-white">1点</strong></span>
+        <span>裏=<strong class="text-stone-400">0点</strong>(4枚全裏=<strong class="text-yellow-400">8点!</strong>)</span>
+        <span>横立ち=<strong class="text-pink-400">5点</strong></span>
+        <span>縦立ち=<strong class="text-cyan-400">10点</strong></span>
+        <span>逆立ち=<strong class="text-purple-400">20点!</strong></span>
+        <span>盤外(ションベン)=<strong class="text-red-400">0点</strong></span>
+        <span>重なり(山)=<strong class="text-orange-400">0点</strong></span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- CONFIG & CHARACTER MODAL -->
+  <div id="config-modal" class="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 hidden flex items-center justify-center p-3 sm:p-6">
+    <div class="bg-stone-900 border-2 border-amber-600/80 rounded-3xl max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-pop">
+      <!-- Modal Header -->
+      <div class="bg-stone-950 px-5 py-4 border-b border-stone-800 flex items-center justify-between">
+        <div class="flex items-center gap-2.5">
+          <i class="fa-solid fa-users-gear text-amber-400 text-xl"></i>
+          <h2 class="text-lg sm:text-xl font-black text-amber-300">プレイヤー＆ローカルルール設定</h2>
+        </div>
+        <button onclick="closeConfigModal()" class="w-8 h-8 rounded-full bg-stone-800 hover:bg-stone-700 text-stone-300 flex items-center justify-center">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <!-- Modal Body -->
+      <div class="p-4 sm:p-6 overflow-y-auto space-y-6">
+        <!-- Player Slots Section -->
+        <div>
+          <h3 class="text-sm font-black text-amber-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+            <i class="fa-solid fa-gamepad"></i> 1. 4隅のプレイヤーとキャラクター割り当て
+          </h3>
+          <div id="modal-player-slots" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <!-- Populated via JS -->
+          </div>
+        </div>
+
+        <!-- Local Rules Section -->
+        <div>
+          <h3 class="text-sm font-black text-amber-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+            <i class="fa-solid fa-scroll"></i> 2. 金ころがし ローカルルール設定
+          </h3>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs sm:text-sm">
+            <!-- Corner Warp -->
+            <label class="flex items-center justify-between bg-stone-800/80 border border-stone-700 rounded-2xl p-3 cursor-pointer hover:border-amber-500/50 transition">
+              <div>
+                <div class="font-bold text-white">角ワープ（カド飛び）</div>
+                <div class="text-[11px] text-stone-400">四隅の角マスにピッタリ止まると次の角(+8マス)へワープ</div>
+              </div>
+              <input type="checkbox" id="rule-corner-warp" checked onchange="updateRulesFromUI()" class="w-5 h-5 accent-amber-500 rounded" />
+            </label>
+
+            <!-- Onbu (Piggyback) -->
+            <label class="flex items-center justify-between bg-stone-800/80 border border-stone-700 rounded-2xl p-3 cursor-pointer hover:border-amber-500/50 transition">
+              <div>
+                <div class="font-bold text-white">おんぶ（相乗りシステム）</div>
+                <div class="text-[11px] text-stone-400">同じマスに止まると相手の駒に乗り、相手が進むと一緒に移動</div>
+              </div>
+              <input type="checkbox" id="rule-onbu" checked onchange="updateRulesFromUI()" class="w-5 h-5 accent-amber-500 rounded" />
+            </label>
+
+            <!-- Fast Promotion Mode -->
+            <label class="flex items-center justify-between bg-stone-800/80 border border-stone-700 rounded-2xl p-3 cursor-pointer hover:border-amber-500/50 transition">
+              <div>
+                <div class="font-bold text-white">高速昇格モード（サクサク決着）</div>
+                <div class="text-[11px] text-stone-400">ON: 歩→銀→飛車→王将 / OFF: 歩→香→桂→銀→角→飛→王将</div>
+              </div>
+              <input type="checkbox" id="rule-fast-promo" checked onchange="updateRulesFromUI()" class="w-5 h-5 accent-amber-500 rounded" />
+            </label>
+
+            <!-- Stack Penalty Backward -->
+            <label class="flex items-center justify-between bg-stone-800/80 border border-stone-700 rounded-2xl p-3 cursor-pointer hover:border-amber-500/50 transition">
+              <div>
+                <div class="font-bold text-white">重なり（山）で出目分後退</div>
+                <div class="text-[11px] text-stone-400">ON: 駒が重なると出目分戻る / OFF: 0点（その場にとどまる）</div>
+              </div>
+              <input type="checkbox" id="rule-stack-back" onchange="updateRulesFromUI()" class="w-5 h-5 accent-amber-500 rounded" />
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="bg-stone-950 px-5 py-3.5 border-t border-stone-800 flex items-center justify-between">
+        <button onclick="resetMatch(); closeConfigModal();" class="bg-red-900/70 hover:bg-red-800 text-red-100 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition">
+          <i class="fa-solid fa-rotate-right mr-1"></i>設定を反映して最初から開始
+        </button>
+        <button onclick="closeConfigModal()" class="bg-amber-500 hover:bg-amber-400 text-stone-950 font-black px-6 py-2 rounded-xl text-xs sm:text-sm shadow-lg transition">
+          閉じる（現在の対局を続ける）
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- VICTORY MODAL -->
+  <div id="victory-modal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-gradient-to-b from-stone-900 to-stone-950 border-2 border-yellow-400 rounded-3xl max-w-md w-full p-6 text-center shadow-[0_0_60px_rgba(250,204,21,0.5)] animate-pop">
+      <div class="text-5xl mb-2">👑</div>
+      <div class="text-xs font-black tracking-widest uppercase text-yellow-400 mb-1">WINNER - 王将ゴール達成！</div>
+      <h2 id="victory-title" class="text-2xl sm:text-3xl font-black text-white mb-2">おんJ民 の勝利！</h2>
+      <p id="victory-quote" class="text-amber-300 font-bold text-sm sm:text-base bg-stone-800/90 border border-amber-500/40 rounded-2xl p-3 mb-5">
+        「昇格ンゴ！優勝や！」
+      </p>
+      <button onclick="closeVictoryAndRestart()" class="w-full bg-gradient-to-r from-amber-400 via-yellow-500 to-amber-500 hover:from-amber-300 hover:to-yellow-400 text-stone-950 font-black py-3 rounded-2xl text-base shadow-xl transition">
+        <i class="fa-solid fa-play mr-1"></i>もう一局遊ぶ！
+      </button>
+    </div>
+  </div>
+
+  <!-- RECORDING STUDIO & VIDEO DOWNLOAD MODAL -->
+  <div id="record-modal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 hidden flex items-center justify-center p-3 sm:p-6">
+    <div class="bg-stone-900 border-2 border-rose-500/80 rounded-3xl max-w-4xl w-full max-h-[92vh] flex flex-col shadow-[0_0_50px_rgba(244,63,94,0.35)] overflow-hidden animate-pop">
+      <!-- Header -->
+      <div class="bg-stone-950 px-5 py-3.5 border-b border-stone-800 flex items-center justify-between">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-xl bg-rose-600/20 border border-rose-500/50 flex items-center justify-center text-rose-400">
+            <i class="fa-solid fa-film text-lg"></i>
+          </div>
+          <div>
+            <h2 class="text-base sm:text-lg font-black text-white flex items-center gap-2">
+              <span>プレイ動画＆CPU音声 録画スタジオ</span>
+              <span id="rec-format-badge" class="text-[10px] bg-rose-600/30 border border-rose-400/50 text-rose-200 px-2 py-0.5 rounded-full">HD 1280x720 60fps</span>
+            </h2>
+            <p class="text-[11px] text-stone-400">3D盤面＋実況字幕カットイン＋出目ポップアップ＋CPUボイス＆効果音を1つの動画に合成録画します</p>
+          </div>
+        </div>
+        <button onclick="closeRecordModal()" class="w-8 h-8 rounded-full bg-stone-800 hover:bg-stone-700 text-stone-300 flex items-center justify-center">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <!-- Body -->
+      <div class="p-4 sm:p-5 overflow-y-auto grid grid-cols-1 lg:grid-cols-12 gap-5">
+        <!-- Left Column: Video Preview Player & Active Download (7 cols) -->
+        <div class="lg:col-span-7 flex flex-col gap-3">
+          <div class="bg-stone-950 border border-stone-800 rounded-2xl overflow-hidden aspect-video relative flex items-center justify-center shadow-inner">
+            <video id="recorded-video-preview" controls playsinline class="w-full h-full object-contain hidden"></video>
+            <div id="video-empty-state" class="text-center p-6 text-stone-500">
+              <i class="fa-solid fa-clapperboard text-4xl mb-2 text-stone-600"></i>
+              <p class="text-xs sm:text-sm font-bold text-stone-400">まだ録画されたクリップがありません</p>
+              <p class="text-[11px] text-stone-500 mt-1">画面上部の「🔴 録画開始」を押して金将を振ると、ここにプレビュー動画が表示されます</p>
+            </div>
+          </div>
+
+          <!-- Primary Action Row -->
+          <div class="flex flex-wrap items-center justify-between gap-2 bg-stone-800/70 border border-stone-700 rounded-2xl p-3">
+            <div class="min-w-0">
+              <div id="active-clip-title" class="text-xs sm:text-sm font-black text-amber-300 truncate">クリップ未選択</div>
+              <div id="active-clip-meta" class="text-[11px] text-stone-400">録画停止すると自動で最新クリップが読み込まれます</div>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+              <button onclick="downloadSelectedClip()" id="btn-download-clip" disabled class="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 disabled:opacity-40 disabled:pointer-events-none text-stone-950 font-black px-4 py-2 rounded-xl text-xs sm:text-sm flex items-center gap-1.5 shadow-lg transition">
+                <i class="fa-solid fa-download"></i>
+                <span>動画をダウンロード保存</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Recorded Clips List -->
+          <div class="bg-stone-950/70 border border-stone-800 rounded-2xl p-3">
+            <div class="text-xs font-black text-stone-300 mb-2 flex items-center justify-between">
+              <span><i class="fa-solid fa-list-ul text-rose-400 mr-1.5"></i>今回のセッションの録画クリップ一覧</span>
+              <span class="text-[11px] text-stone-500">クリックで再生切替</span>
+            </div>
+            <div id="recorded-clips-list" class="space-y-1.5 max-h-36 overflow-y-auto">
+              <div class="text-xs text-stone-500 py-2 text-center">録画履歴なし</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Column: Audio & Voice Recording Engine Settings (5 cols) -->
+        <div class="lg:col-span-5 flex flex-col gap-3">
+          <div class="bg-stone-800/80 border border-stone-700 rounded-2xl p-3.5 space-y-3">
+            <h3 class="text-xs sm:text-sm font-black text-rose-300 flex items-center gap-1.5">
+              <i class="fa-solid fa-microphone-lines"></i>
+              <span>CPUボイスの動画録音モード設定</span>
+            </h3>
+            <p class="text-[11px] text-stone-300 leading-relaxed">
+              ブラウザ標準の音声合成（Web Speech）に加え、**動画ファイル内に確実にキャラの声を録音する専用フォルマント音声シンセ**を搭載しています。
+            </p>
+
+            <!-- Voice Synth Mode Selector -->
+            <div class="space-y-1.5 text-xs">
+              <label class="flex items-start gap-2.5 bg-stone-900/90 border border-stone-700 rounded-xl p-2.5 cursor-pointer hover:border-amber-500/50 transition">
+                <input type="radio" name="voice-rec-mode" value="hybrid" checked onchange="setVoiceRecMode('hybrid')" class="mt-0.5 accent-rose-500" />
+                <div>
+                  <div class="font-bold text-white">① ハイブリッド（推奨・設定不要）</div>
+                  <div class="text-[11px] text-stone-400">プレイ中はブラウザ標準TTS＋動画ファイル内にはキャラ別母音フォルマント合成ボイスを自動録音</div>
+                </div>
+              </label>
+
+              <label class="flex items-start gap-2.5 bg-stone-900/90 border border-stone-700 rounded-xl p-2.5 cursor-pointer hover:border-amber-500/50 transition">
+                <input type="radio" name="voice-rec-mode" value="synth" onchange="setVoiceRecMode('synth')" class="mt-0.5 accent-rose-500" />
+                <div>
+                  <div class="font-bold text-white">② レトロ合成ボイス（プレイ音＝録画音100%一致）</div>
+                  <div class="text-[11px] text-stone-400">プレイ中も録画動画も、キャラ別周波数（おんJ 145Hz / メスガキ 290Hz / 野獣 110Hz / ツイフェミ 235Hz）の合成ボイスで再生・録音</div>
+                </div>
+              </label>
+
+              <label class="flex items-start gap-2.5 bg-stone-900/90 border border-stone-700 rounded-xl p-2.5 cursor-pointer hover:border-amber-500/50 transition">
+                <input type="radio" name="voice-rec-mode" value="voicevox" onchange="setVoiceRecMode('voicevox')" class="mt-0.5 accent-rose-500" />
+                <div>
+                  <div class="font-bold text-white">③ VOICEVOX ローカル連携 (localhost:50021)</div>
+                  <div class="text-[11px] text-stone-400">PCで起動中のVOICEVOXから音声を生成し、高音質のまま動画ストリームへ直接録音（未検出時は①へ自動フォールバック）</div>
+                </div>
+              </label>
+            </div>
+
+            <!-- Additional Audio Mix Toggles -->
+            <div class="pt-2 border-t border-stone-700 space-y-2">
+              <div class="flex items-center justify-between">
+                <div>
+                  <div class="text-xs font-bold text-white">🎵 和風テーブルBGMを流す＆録音</div>
+                  <div class="text-[10px] text-stone-400">対局を盛り上げる軽快な和風シンセBGM</div>
+                </div>
+                <input type="checkbox" id="toggle-bgm" onchange="toggleBgm(this.checked)" class="w-4 h-4 accent-amber-500 rounded" />
+              </div>
+
+              <div class="flex items-center justify-between">
+                <div>
+                  <div class="text-xs font-bold text-white">🎙️ マイク／ステレオミキサー混音</div>
+                  <div class="text-[10px] text-stone-400">自分の実況声やスピーカー出力を動画にミックス</div>
+                </div>
+                <button onclick="toggleMicMix()" id="btn-mic-mix" class="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-stone-700 text-stone-300 hover:bg-stone-600 transition">
+                  OFF
+                </button>
+              </div>
+            </div>
+
+            <!-- Tab / System Audio Capture Alternative -->
+            <div class="pt-2 border-t border-stone-700">
+              <button onclick="startTabDisplayRecording()" class="w-full bg-stone-900 hover:bg-stone-950 border border-amber-500/40 text-amber-200 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition">
+                <i class="fa-solid fa-desktop text-amber-400"></i>
+                <span>PCタブ音声ごと画面キャプチャ録画を開始</span>
+              </button>
+              <p class="text-[10px] text-stone-400 mt-1 text-center">※Chrome等で「タブの音声も共有」にチェックを入れるとWeb Speech APIの生声もそのまま録音できます</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="bg-stone-950 px-5 py-3 border-t border-stone-800 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <button onclick="toggleRecording(); closeRecordModal();" id="modal-rec-btn" class="bg-rose-600 hover:bg-rose-500 text-white font-black px-4 py-2 rounded-xl text-xs sm:text-sm flex items-center gap-1.5 shadow transition">
+            <i class="fa-solid fa-circle"></i>
+            <span>新しい録画を開始して対局へ戻る</span>
+          </button>
+        </div>
+        <button onclick="closeRecordModal()" class="bg-stone-800 hover:bg-stone-700 text-stone-200 font-bold px-5 py-2 rounded-xl text-xs sm:text-sm transition">
+          閉じる
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /**************************************************************************
+     * 1. CHARACTER DEFINITIONS & DIALOGUE POOLS
+     **************************************************************************/
+    const CHARACTERS = {
+      onj: {
+        id: 'onj',
+        name: 'おんJ民',
+        avatar: '⚾',
+        badgeBg: 'bg-yellow-500 text-stone-950',
+        colorHex: 0xfacc15,
+        ringColor: '#facc15',
+        pitch: 0.95,
+        rate: 1.15,
+        f0: 145, // Fundamental frequency (Hz) for formant vocal synthesizer
+        voicevoxSpeaker: 3, // Zundamon / male-ish fallback
+        styleDesc: '豪快パワー＆乱れ投げ（猛虎魂）',
+        throwProfile: { power: 1.18, spin: 0.55, spread: 1.35, edgeBias: 0.05 },
+        lines: {
+          turnStart: [
+            'いくでー！ワイのターンや！',
+            'そろそろ本気出すンゴ！見てろや！',
+            'ワイ将、ここで神の一手を決める模様'
+          ],
+          throw: [
+            'ファッ！？いけえええ！',
+            '頼むでしかし！立つんやで！',
+            'サンガツ！猛虎魂見せたれ！'
+          ],
+          stand: [
+            'ファッ！？立ったンゴオオオ！',
+            'キタァァァ！ワイ将、天才すぎるやろ！',
+            'サンイチ！気持ちええんじゃ〜！'
+          ],
+          normalGood: [
+            'まあまあの出目やな！着実にいくで！',
+            'ええやん！この調子で王将まで突っ走るで！'
+          ],
+          fail: [
+            'ションベンや…訴訟も辞さない',
+            'ンゴゴゴゴｗｗｗなんで落ちるんや！',
+            'なんでや！阪神関係ないやろ！'
+          ],
+          onbuSuccess: [
+            'おんぶンゴ！サンイチ！',
+            'ニキの背中、温かいナリねぇ…ｗ'
+          ],
+          onbuReceived: [
+            'ファッ！？重たいンゴねぇ…',
+            'おいコラ！タダ乗りすんなや！'
+          ],
+          promote: [
+            '昇格ンゴ！優勝や！',
+            'ワイ将、ついに覚醒してしまう！'
+          ]
+        }
+      },
+      mesugaki: {
+        id: 'mesugaki',
+        name: 'メスガキ',
+        avatar: '😈',
+        badgeBg: 'bg-pink-500 text-white',
+        colorHex: 0xf43f5e,
+        ringColor: '#f43f5e',
+        pitch: 1.55,
+        rate: 1.25,
+        f0: 290, // High-pitched teasing formant frequency
+        voicevoxSpeaker: 2,
+        styleDesc: '技巧派・横回転スピン（横立ち5点狙い）',
+        throwProfile: { power: 0.92, spin: 1.55, spread: 0.75, edgeBias: 0.1 },
+        lines: {
+          turnStart: [
+            'ざぁ〜こ♡ 見てなさいよ！',
+            'まだ歩なの〜？♡ お手本見せてあげる♡',
+            'あたしの番ね！ざこざこ〜♡'
+          ],
+          throw: [
+            'ほらほら、立つよ〜？♡',
+            'よっと♡ くるくる〜っ！',
+            'いっけぇ〜♡ ざぁこ♡'
+          ],
+          stand: [
+            'えっへん！立ったし〜♡ ざこ♡',
+            '余裕すぎ〜♡ 格が違うんだよ〜♡',
+            'ほら見て見て！立ったよ〜♡ 泣いちゃった？♡'
+          ],
+          normalGood: [
+            'ふふっ、順調順調〜♡',
+            'あんたたち遅すぎ〜♡ ざぁこ♡'
+          ],
+          fail: [
+            'きゃあっ！？落ちちゃった…今の無し！！',
+            'う、うそでしょ…！？笑うなっ！！',
+            'な、なによこれ！盤が滑っただけだし！！'
+          ],
+          onbuSuccess: [
+            'おんぶ〜♡ ちゃんと運びなさいよね！',
+            'お兄さんの背中、乗り心地わる〜い♡ はやく進んでよ♡'
+          ],
+          onbuReceived: [
+            'ちょっ、気安く乗らないでよ！変態！ざぁこ♡',
+            'きゃあっ！？重いんだけど〜！！'
+          ],
+          promote: [
+            'お先に昇格〜♡ ざこざこ♡',
+            'バイバ〜イ♡ 置いてっちゃうよ〜♡'
+          ]
+        }
+      },
+      yaju: {
+        id: 'yaju',
+        name: '野獣先輩',
+        avatar: '🕶️',
+        badgeBg: 'bg-amber-700 text-amber-100',
+        colorHex: 0xd97706,
+        ringColor: '#f59e0b',
+        pitch: 0.65,
+        rate: 0.90,
+        f0: 110, // Deep baritone formant frequency
+        voicevoxSpeaker: 13,
+        styleDesc: '重撃パワー型（縦立ち・逆立ち狙い／盤外注意）',
+        throwProfile: { power: 1.38, spin: 0.85, spread: 1.25, edgeBias: 0.22 },
+        lines: {
+          turnStart: [
+            'いいよ！こいよ！',
+            'おかのした！いきますよ〜',
+            'じゃけん夜行きましょうね〜'
+          ],
+          throw: [
+            'イキスギィ！',
+            'ンアッー！いけっ！',
+            'やりますねぇ！とどけ！'
+          ],
+          stand: [
+            'やりますねぇ！立ったぜ！',
+            'いいゾ〜これ！たまげたなぁ…！',
+            'ファッ！？これもうわかんねぇな（歓喜）'
+          ],
+          normalGood: [
+            'いいゾ〜これ！',
+            'まずまずですねぇ！王将いきますよ〜'
+          ],
+          fail: [
+            'ファッ！？落ちた…まずいですよ！',
+            'あっ…ふーん（察し）',
+            'ぬわああん疲れたもおおおおん'
+          ],
+          onbuSuccess: [
+            'おんぶいいっすか？ありがとナス！',
+            'お前のことが好きだったんだよ！運んでくれよな〜'
+          ],
+          onbuReceived: [
+            '暴れんなよ…暴れんなよ…',
+            'やめてくれよ…（絶望）'
+          ],
+          promote: [
+            '王将！まずうちさぁ、屋上…あんだけど…',
+            '見たけりゃ見せてやるよ（昇格）'
+          ]
+        }
+      },
+      twifemi: {
+        id: 'twifemi',
+        name: 'ツイフェミ',
+        avatar: '📢',
+        badgeBg: 'bg-purple-600 text-white',
+        colorHex: 0xa855f7,
+        ringColor: '#a855f7',
+        pitch: 1.25,
+        rate: 1.35,
+        f0: 235, // Sharp rapid-fire formant frequency
+        voicevoxSpeaker: 0,
+        styleDesc: '慎重・密集型（盤外を防ぐが重なりやすい）',
+        throwProfile: { power: 0.72, spin: 0.25, spread: 0.45, edgeBias: -0.18 },
+        lines: {
+          turnStart: [
+            'それって構造的な問題ですよね？振ります！',
+            'ちょっと待って！？金将ばかり振るの多様性に欠けてない！？',
+            '私の番です！忖度なしでいきます！'
+          ],
+          throw: [
+            'ハァ！？いきますよ！',
+            'コンプライアンス遵守で投げます！',
+            'これだから将棋界隈は…！えいっ！'
+          ],
+          stand: [
+            '当然の結果です！エンパワメント！',
+            'これが本来の実力なの！わかった！？',
+            '歴史的快挙です！スクショ撮りました！'
+          ],
+          normalGood: [
+            '当然の権利ですね！進みます！',
+            '着実にガラスの天井を破ります！'
+          ],
+          fail: [
+            '盤外落下！？将棋盤の設計が家父長制！',
+            'ちょっと待って！？この将棋盤、傾斜にバイアスかかってない！？',
+            '運営の重力設定がおかしいんですけど！署名運動します！'
+          ],
+          onbuSuccess: [
+            'おんぶ！？ケア労働の搾取反対！（乗るけど）',
+            '当然の配慮よね！しっかり運びなさい！'
+          ],
+          onbuReceived: [
+            'ちょっと！パーソナルスペース侵害しないでくれる！？',
+            '同意のない相乗りはお断りします！！'
+          ],
+          promote: [
+            'ガラスの天井を打ち破って昇格よ！！',
+            'エンパワーメント達成です！！'
+          ]
+        }
+      }
+    };
+
+    /**************************************************************************
+     * 2. PROGRESSION RANKS & GAME STATE
+     **************************************************************************/
+    const RANKS_FAST = [
+      { kanji: '歩兵', short: '歩', scale: 0.88 },
+      { kanji: '銀将', short: '銀', scale: 0.94 },
+      { kanji: '飛車', short: '飛', scale: 1.02 },
+      { kanji: '王将', short: '王', scale: 1.10 }
+    ];
+
+    const RANKS_FULL = [
+      { kanji: '歩兵', short: '歩', scale: 0.85 },
+      { kanji: '香車', short: '香', scale: 0.88 },
+      { kanji: '桂馬', short: '桂', scale: 0.90 },
+      { kanji: '銀将', short: '銀', scale: 0.94 },
+      { kanji: '角行', short: '角', scale: 0.98 },
+      { kanji: '飛車', short: '飛', scale: 1.02 },
+      { kanji: '王将', short: '王', scale: 1.10 }
+    ];
+
+    const CORNER_NAMES = ['南東角(1九)', '南西角(9九)', '北西角(9一)', '北東角(1一)'];
+    const START_SQUARES = [0, 8, 16, 24]; // 4 corners of the 32-square outer perimeter
+
+    const gameRules = {
+      assistMode: 'entame', // 'real' | 'entame' | 'chaos'
+      cornerWarp: true,
+      onbu: true,
+      fastPromo: true,
+      stackBackward: false
+    };
+
+    const players = [
+      { slot: 0, charId: 'onj', control: 'human', startSq: 0, currentSq: 0, laps: 0, rankIdx: 0, ridingOn: null, rider: null, skipTurn: false },
+      { slot: 1, charId: 'mesugaki', control: 'cpu', startSq: 8, currentSq: 8, laps: 0, rankIdx: 0, ridingOn: null, rider: null, skipTurn: false },
+      { slot: 2, charId: 'yaju', control: 'cpu', startSq: 16, currentSq: 16, laps: 0, rankIdx: 0, ridingOn: null, rider: null, skipTurn: false },
+      { slot: 3, charId: 'twifemi', control: 'cpu', startSq: 24, currentSq: 24, laps: 0, rankIdx: 0, ridingOn: null, rider: null, skipTurn: false }
+    ];
+
+    let currentTurnIdx = 0;
+    let gameState = 'IDLE'; // 'IDLE' | 'ROLLING' | 'MOVING' | 'GAMEOVER'
+    let voiceEnabled = true;
+    let voiceRecMode = 'hybrid'; // 'hybrid' | 'synth' | 'voicevox'
+    let gameSpeed = 1.0;
+    let cameraMode = 0; // 0: Diagonal Overview, 1: Top-down, 2: Dynamic Action Zoom
+
+    // Active HUD state mirrored onto the 1280x720 Recording Composite Canvas
+    const activeSpeechOverlay = {
+      visible: false,
+      charId: 'onj',
+      slotIdx: 0,
+      text: '',
+      timestamp: 0
+    };
+
+    const activeResultOverlay = {
+      visible: false,
+      badge: '',
+      title: '',
+      pieces: []
+    };
+
+    /**************************************************************************
+     * 3. WEB AUDIO API (MASTER RECORDING BUS, WOOD CLACKS, FORMANT VOICE SYNTH & BGM)
+     **************************************************************************/
+    let audioCtx = null;
+    let masterAudioGain = null;
+    let mediaStreamDest = null;
+    let micStream = null;
+    let micSourceNode = null;
+    let isMicMixed = false;
+    let bgmInterval = null;
+    let isBgmPlaying = false;
+
+    function ensureAudioCtx() {
+      if (!audioCtx) {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (AudioContextClass) {
+          audioCtx = new AudioContextClass();
+          masterAudioGain = audioCtx.createGain();
+          masterAudioGain.gain.value = 1.0;
+          masterAudioGain.connect(audioCtx.destination);
+          if (typeof audioCtx.createMediaStreamDestination === 'function') {
+            mediaStreamDest = audioCtx.createMediaStreamDestination();
+            masterAudioGain.connect(mediaStreamDest);
+          }
+        }
+      }
+      if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+    }
+
+    function getAudioOutputNode() {
+      ensureAudioCtx();
+      return masterAudioGain || (audioCtx ? audioCtx.destination : null);
+    }
+
+    // Wooden Shogi piece clack ("パチッ" / "カラカラ") routed to both speakers & recording stream
+    function playWoodClack(intensity = 0.7, pitchShift = 1.0) {
+      try {
+        const out = getAudioOutputNode();
+        if (!audioCtx || !out) return;
+        const now = audioCtx.currentTime;
+        const gainVal = Math.min(1.0, Math.max(0.05, intensity * 0.45));
+
+        const osc = audioCtx.createOscillator();
+        const oscGain = audioCtx.createGain();
+        osc.type = 'triangle';
+        const baseFreq = (750 + Math.random() * 220) * pitchShift;
+        osc.frequency.setValueAtTime(baseFreq, now);
+        osc.frequency.exponentialRampToValueAtTime(180, now + 0.045);
+
+        oscGain.gain.setValueAtTime(gainVal, now);
+        oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+
+        osc.connect(oscGain);
+        oscGain.connect(out);
+        osc.start(now);
+        osc.stop(now + 0.055);
+
+        const osc2 = audioCtx.createOscillator();
+        const osc2Gain = audioCtx.createGain();
+        osc2.type = 'sine';
+        osc2.frequency.setValueAtTime(1950 * pitchShift, now);
+        osc2.frequency.exponentialRampToValueAtTime(420, now + 0.02);
+        osc2Gain.gain.setValueAtTime(gainVal * 0.7, now);
+        osc2Gain.gain.exponentialRampToValueAtTime(0.001, now + 0.025);
+        osc2.connect(osc2Gain);
+        osc2Gain.connect(out);
+        osc2.start(now);
+        osc2.stop(now + 0.03);
+      } catch (e) {}
+    }
+
+    // Special chime when a piece stands up (横立ち / 縦立ち / 逆立ち)
+    function playStandChime(level = 1) {
+      try {
+        const out = getAudioOutputNode();
+        if (!audioCtx || !out) return;
+        const now = audioCtx.currentTime;
+        const freqs = level >= 2 ? [587.33, 880, 1174.66, 1760] : [523.25, 659.25, 783.99, 1046.5];
+        freqs.forEach((f, idx) => {
+          const osc = audioCtx.createOscillator();
+          const g = audioCtx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(f, now + idx * 0.06);
+          g.gain.setValueAtTime(0.22, now + idx * 0.06);
+          g.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.06 + 0.35);
+          osc.connect(g);
+          g.connect(out);
+          osc.start(now + idx * 0.06);
+          osc.stop(now + idx * 0.06 + 0.36);
+        });
+      } catch (e) {}
+    }
+
+    // Comedic fail sound (Shonben / Stack)
+    function playFailSound() {
+      try {
+        const out = getAudioOutputNode();
+        if (!audioCtx || !out) return;
+        const now = audioCtx.currentTime;
+        const notes = [311.13, 293.66, 277.18, 246.94];
+        notes.forEach((f, idx) => {
+          const osc = audioCtx.createOscillator();
+          const g = audioCtx.createGain();
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(f, now + idx * 0.14);
+          if (idx === 3) {
+            osc.frequency.linearRampToValueAtTime(190, now + idx * 0.14 + 0.35);
+          }
+          g.gain.setValueAtTime(0.14, now + idx * 0.14);
+          g.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.14 + (idx === 3 ? 0.38 : 0.13));
+          osc.connect(g);
+          g.connect(out);
+          osc.start(now + idx * 0.14);
+          osc.stop(now + idx * 0.14 + (idx === 3 ? 0.4 : 0.14));
+        });
+      } catch (e) {}
+    }
+
+    // Promotion / Warp fanfare
+    function playFanfare() {
+      try {
+        const out = getAudioOutputNode();
+        if (!audioCtx || !out) return;
+        const now = audioCtx.currentTime;
+        const melody = [523.25, 659.25, 783.99, 1046.5, 783.99, 1046.5];
+        const times = [0, 0.1, 0.2, 0.32, 0.46, 0.58];
+        const durs = [0.09, 0.09, 0.1, 0.12, 0.1, 0.4];
+        melody.forEach((f, i) => {
+          const osc = audioCtx.createOscillator();
+          const g = audioCtx.createGain();
+          osc.type = 'square';
+          osc.frequency.setValueAtTime(f, now + times[i]);
+          g.gain.setValueAtTime(0.15, now + times[i]);
+          g.gain.exponentialRampToValueAtTime(0.001, now + times[i] + durs[i]);
+          osc.connect(g);
+          g.connect(out);
+          osc.start(now + times[i]);
+          osc.stop(now + times[i] + durs[i] + 0.02);
+        });
+      } catch (e) {}
+    }
+
+    // Procedural Japanese Vowel Formant Synthesizer (Ensures CPU Voices are ALWAYS captured in recorded video!)
+    const VOWEL_FORMANTS = {
+      a: [780, 1220, 2600],
+      i: [300, 2250, 3000],
+      u: [350, 1150, 2450],
+      e: [500, 1850, 2650],
+      o: [480, 880, 2500],
+      n: [260, 1000, 2100]
+    };
+
+    function charToVowelKey(ch) {
+      if ('あかさたなはまやらわがざだばぱアカサタナハマヤラワガザダバパぁゃァャ'.includes(ch)) return 'a';
+      if ('いきしちにひみりぎじぢびぴイキシチニヒミリギジヂビピぃィ'.includes(ch)) return 'i';
+      if ('うくすつぬふむゆるぐずづぶぷウクスツヌフムユルグズヅブプぅゅゥュヴ'.includes(ch)) return 'u';
+      if ('えけせてねへめれげぜでべぺエケセテネヘメレゲゼデベペぇェ'.includes(ch)) return 'e';
+      if ('おこそとのほもよろをごぞどぼぽオコソトノホモヨロヲゴゾドボポぉょォョ'.includes(ch)) return 'o';
+      if ('んン'.includes(ch)) return 'n';
+      return ['a', 'o', 'e', 'i', 'u'][Math.abs(ch.charCodeAt(0)) % 5];
+    }
+
+    // Plays expressive formant-filtered syllables into the Recording Stream (and speakers if desired)
+    function playFormantVocalSynth(char, text, category, routeToSpeakersToo = false) {
+      try {
+        ensureAudioCtx();
+        if (!audioCtx) return;
+
+        // Decide destination:
+        // In 'hybrid' mode: Web Speech plays to speakers, while Formant Vocal Synth records into `mediaStreamDest`!
+        // In 'synth' mode (or if Web Speech is unavailable): Formant Vocal Synth plays to `masterAudioGain` (both speakers & recording).
+        const targetNode = routeToSpeakersToo
+          ? masterAudioGain
+          : (mediaStreamDest || masterAudioGain);
+        if (!targetNode) return;
+
+        const cleanChars = text.replace(/[「」『』（）()！？!?…・、。〜～♡ｗw\s]/g, '').split('');
+        if (cleanChars.length === 0) return;
+
+        const maxSyllables = Math.min(cleanChars.length, 22);
+        const stepDur = Math.max(0.055, 0.085 / (char.rate || 1.0));
+        const baseF0 = char.f0 || 160;
+        const now = audioCtx.currentTime;
+
+        for (let i = 0; i < maxSyllables; i++) {
+          const ch = cleanChars[i];
+          const vKey = charToVowelKey(ch);
+          const formants = VOWEL_FORMANTS[vKey] || VOWEL_FORMANTS.a;
+          const t0 = now + i * stepDur;
+          const dur = stepDur * 0.86;
+
+          // Emotional pitch inflection
+          let pitchContour = 1.0 + Math.sin(i * 0.7) * 0.08;
+          if (category === 'stand' || category === 'promote') {
+            pitchContour *= 1.0 + (i / maxSyllables) * 0.28;
+          } else if (category === 'fail') {
+            pitchContour *= 1.05 - (i / maxSyllables) * 0.25;
+          } else if (char.id === 'mesugaki' && i % 3 === 2) {
+            pitchContour *= 1.18; // Playful upward inflection ("ざぁ〜こ♡")
+          }
+
+          const freq = baseF0 * pitchContour;
+
+          const osc = audioCtx.createOscillator();
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(freq, t0);
+          osc.frequency.linearRampToValueAtTime(freq * (char.id === 'mesugaki' ? 1.06 : 0.97), t0 + dur);
+
+          const voiceGain = audioCtx.createGain();
+          voiceGain.gain.setValueAtTime(0.001, t0);
+          voiceGain.gain.linearRampToValueAtTime(0.18, t0 + 0.012);
+          voiceGain.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+
+          // 3 parallel bandpass formant filters (F1, F2, F3) to shape human-like vowel timbre
+          formants.forEach((fFreq, fIdx) => {
+            const bp = audioCtx.createBiquadFilter();
+            bp.type = 'bandpass';
+            bp.frequency.setValueAtTime(fFreq * (char.f0 > 220 ? 1.12 : 1.0), t0);
+            bp.Q.setValueAtTime(fIdx === 0 ? 5.5 : 8.0, t0);
+
+            const fGain = audioCtx.createGain();
+            fGain.gain.value = fIdx === 0 ? 1.0 : (fIdx === 1 ? 0.65 : 0.3);
+
+            osc.connect(bp);
+            bp.connect(fGain);
+            fGain.connect(voiceGain);
+          });
+
+          voiceGain.connect(targetNode);
+          osc.start(t0);
+          osc.stop(t0 + dur + 0.01);
+        }
+      } catch (e) {}
+    }
+
+    // Optional VOICEVOX Local Engine Integration (records 100% natively into video when running)
+    async function trySpeakVoicevox(char, cleanText) {
+      try {
+        const speakerId = char.voicevoxSpeaker ?? 3;
+        const qRes = await fetch(`http://127.0.0.1:50021/audio_query?text=${encodeURIComponent(cleanText)}&speaker=${speakerId}`, {
+          method: 'POST'
+        });
+        if (!qRes.ok) return false;
+        const queryJson = await qRes.json();
+        queryJson.speedScale = char.rate || 1.1;
+
+        const sRes = await fetch(`http://127.0.0.1:50021/synthesis?speaker=${speakerId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(queryJson)
+        });
+        if (!sRes.ok) return false;
+
+        const arrayBuf = await sRes.arrayBuffer();
+        ensureAudioCtx();
+        const audioBuf = await audioCtx.decodeAudioData(arrayBuf);
+        const src = audioCtx.createBufferSource();
+        src.buffer = audioBuf;
+        src.connect(getAudioOutputNode());
+        src.start();
+        return true;
+      } catch (e) {
+        return false;
+      }
+    }
+
+    // Optional Japanese Tabletop Pentatonic BGM (routed into masterAudioGain so it also records!)
+    function toggleBgm(enable) {
+      isBgmPlaying = enable;
+      if (bgmInterval) {
+        clearInterval(bgmInterval);
+        bgmInterval = null;
+      }
+      if (!enable) return;
+
+      ensureAudioCtx();
+      // Miyako-bushi / Yo pentatonic scale notes (D4, E4, G4, A4, B4, D5, E5)
+      const scale = [293.66, 329.63, 392.00, 440.00, 493.88, 587.33, 659.25];
+      let step = 0;
+      bgmInterval = setInterval(() => {
+        if (!isBgmPlaying || !audioCtx) return;
+        const out = getAudioOutputNode();
+        if (!out) return;
+        const now = audioCtx.currentTime;
+        const note = scale[(step * 2 + (step % 3)) % scale.length];
+        step++;
+
+        // Koto/Shamisen pluck envelope
+        const osc = audioCtx.createOscillator();
+        const g = audioCtx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(note, now);
+        g.gain.setValueAtTime(0.055, now);
+        g.gain.exponentialRampToValueAtTime(0.0008, now + 0.32);
+        osc.connect(g);
+        g.connect(out);
+        osc.start(now);
+        osc.stop(now + 0.34);
+      }, 360);
+    }
+
+    // Optional Microphone / Speaker Loopback Mix into Recording Stream
+    async function toggleMicMix() {
+      const btn = document.getElementById('btn-mic-mix');
+      if (isMicMixed) {
+        if (micSourceNode) {
+          try { micSourceNode.disconnect(); } catch (e) {}
+          micSourceNode = null;
+        }
+        if (micStream) {
+          micStream.getTracks().forEach(t => t.stop());
+          micStream = null;
+        }
+        isMicMixed = false;
+        btn.textContent = 'OFF';
+        btn.className = 'px-2.5 py-1 rounded-lg text-[11px] font-bold bg-stone-700 text-stone-300 hover:bg-stone-600 transition';
+        return;
+      }
+
+      try {
+        ensureAudioCtx();
+        micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        micSourceNode = audioCtx.createMediaStreamSource(micStream);
+        if (mediaStreamDest) {
+          micSourceNode.connect(mediaStreamDest);
+        }
+        isMicMixed = true;
+        btn.textContent = 'ON (録音中)';
+        btn.className = 'px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-600 text-white shadow transition';
+      } catch (e) {
+        btn.textContent = '権限なし';
+      }
+    }
+
+    /**************************************************************************
+     * 4. WEB SPEECH API VOICE SYNTHESIS & SPEECH BANNER
+     **************************************************************************/
+    let speechBannerTimer = null;
+    let cachedJpVoices = [];
+
+    function loadVoices() {
+      if (!('speechSynthesis' in window)) return;
+      cachedJpVoices = window.speechSynthesis.getVoices().filter(v => v.lang && v.lang.includes('ja'));
+    }
+    if ('speechSynthesis' in window) {
+      loadVoices();
+      window.speechSynthesis.onvoiceschanged = loadVoices;
+    }
+
+    function setVoiceRecMode(mode) {
+      voiceRecMode = mode;
+    }
+
+    function speakCharacter(charId, category, customSlotIdx = null) {
+      const char = CHARACTERS[charId];
+      if (!char) return;
+      const pool = char.lines[category] || char.lines.turnStart;
+      const line = pool[Math.floor(Math.random() * pool.length)];
+
+      // Update Recording HUD Subtitle State
+      activeSpeechOverlay.visible = true;
+      activeSpeechOverlay.charId = charId;
+      activeSpeechOverlay.slotIdx = customSlotIdx !== null ? customSlotIdx : currentTurnIdx;
+      activeSpeechOverlay.text = line;
+      activeSpeechOverlay.timestamp = performance.now();
+
+      // Show UI Speech Bubble
+      const banner = document.getElementById('speech-banner');
+      const avatarEl = document.getElementById('speech-avatar');
+      const nameEl = document.getElementById('speech-name');
+      const subEl = document.getElementById('speech-sub');
+      const textEl = document.getElementById('speech-text');
+
+      avatarEl.textContent = char.avatar;
+      avatarEl.style.backgroundColor = char.ringColor + '33';
+      avatarEl.style.borderColor = char.ringColor;
+      nameEl.textContent = char.name;
+      nameEl.className = `font-black text-xs sm:text-sm px-2.5 py-0.5 rounded-full ${char.badgeBg}`;
+      subEl.textContent = customSlotIdx !== null ? `P${customSlotIdx + 1} (${CORNER_NAMES[customSlotIdx]})` : char.styleDesc;
+      textEl.textContent = `「${line}」`;
+
+      banner.classList.remove('hidden');
+      if (speechBannerTimer) clearTimeout(speechBannerTimer);
+      speechBannerTimer = setTimeout(() => {
+        banner.classList.add('hidden');
+        activeSpeechOverlay.visible = false;
+      }, 4200 / gameSpeed);
+
+      if (!voiceEnabled) return line;
+
+      const cleanText = line.replace(/[♡ｗ]/g, '').replace(/ｗｗ+/g, 'わらわら');
+
+      if (voiceRecMode === 'synth') {
+        // Play Formant Vocal Synth to BOTH speakers and recording stream
+        if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+        playFormantVocalSynth(char, cleanText, category, true);
+      } else if (voiceRecMode === 'voicevox') {
+        // Try local VOICEVOX first; fallback to Hybrid if not running
+        trySpeakVoicevox(char, cleanText).then((ok) => {
+          if (!ok) {
+            triggerWebSpeechUtterance(char, cleanText);
+            playFormantVocalSynth(char, cleanText, category, false);
+          }
+        });
+      } else {
+        // 'hybrid' (default): Web Speech API for live speakers + Formant Vocal Synth piped into the recorded video stream!
+        const spokeWebSpeech = triggerWebSpeechUtterance(char, cleanText);
+        playFormantVocalSynth(char, cleanText, category, !spokeWebSpeech);
+      }
+
+      return line;
+    }
+
+    function triggerWebSpeechUtterance(char, cleanText) {
+      if (!('speechSynthesis' in window)) return false;
+      try {
+        window.speechSynthesis.cancel();
+        const utter = new SpeechSynthesisUtterance(cleanText);
+        utter.lang = 'ja-JP';
+        utter.pitch = char.pitch;
+        utter.rate = Math.min(2.0, char.rate * Math.sqrt(gameSpeed));
+        utter.volume = 1.0;
+        if (cachedJpVoices.length > 0) {
+          utter.voice = cachedJpVoices[0];
+        }
+        window.speechSynthesis.speak(utter);
+        return true;
+      } catch (e) {
+        return false;
+      }
+    }
+
+    function toggleVoice() {
+      voiceEnabled = !voiceEnabled;
+      const btn = document.getElementById('btn-voice');
+      const icon = document.getElementById('voice-icon');
+      const label = document.getElementById('voice-label');
+      if (voiceEnabled) {
+        btn.className = 'bg-amber-700/80 hover:bg-amber-600 border border-amber-400/60 text-white px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition shadow';
+        icon.className = 'fa-solid fa-volume-high';
+        label.textContent = '声 ON';
+      } else {
+        if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+        btn.className = 'bg-stone-800 hover:bg-stone-700 border border-stone-600 text-stone-400 px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition shadow';
+        icon.className = 'fa-solid fa-volume-xmark';
+        label.textContent = '声 OFF';
+      }
+    }
+
+    /**************************************************************************
+     * 5. THREE.JS & CANNON.JS 3D SCENE SETUP
+     **************************************************************************/
+    const container = document.getElementById('canvas-container');
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x14110e);
+    scene.fog = new THREE.FogExp2(0x14110e, 0.018);
+
+    const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.1, 200);
+    // preserveDrawingBuffer: true ensures clean capture onto the 1280x720 Composite Recording Canvas
+    const renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      preserveDrawingBuffer: true,
+      powerPreference: 'high-performance'
+    });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    container.appendChild(renderer.domElement);
+
+    // Lighting
+    const ambientLight = new THREE.AmbientLight(0xffedd5, 0.65);
+    scene.add(ambientLight);
+
+    const dirLight = new THREE.DirectionalLight(0xfff7ed, 0.95);
+    dirLight.position.set(8, 22, 12);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.width = 2048;
+    dirLight.shadow.mapSize.height = 2048;
+    dirLight.shadow.camera.near = 2;
+    dirLight.shadow.camera.far = 50;
+    const d = 12;
+    dirLight.shadow.camera.left = -d;
+    dirLight.shadow.camera.right = d;
+    dirLight.shadow.camera.top = d;
+    dirLight.shadow.camera.bottom = -d;
+    dirLight.shadow.bias = -0.0005;
+    scene.add(dirLight);
+
+    const rimLight = new THREE.PointLight(0xf59e0b, 0.4, 30);
+    rimLight.position.set(-10, 10, -10);
+    scene.add(rimLight);
+
+    // Shogi Board Dimensions
+    // 9x9 grid. Each cell is 1.15 x 1.25 units.
+    const CELL_W = 1.16;
+    const CELL_D = 1.24;
+    const BOARD_W = CELL_W * 9 + 0.8; // ~11.24
+    const BOARD_D = CELL_D * 9 + 0.8; // ~11.96
+    const BOARD_H = 1.8;
+    const BOARD_TOP_Y = 0; // Top surface of the Shogi board is at y = 0
+
+    // Create Procedural Tatami Mat Floor Texture
+    function createTatamiTexture() {
+      const c = document.createElement('canvas');
+      c.width = 512;
+      c.height = 512;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#3f4f29';
+      ctx.fillRect(0, 0, 512, 512);
+      // Weave lines
+      for (let y = 0; y < 512; y += 4) {
+        ctx.fillStyle = y % 8 === 0 ? 'rgba(255,255,220,0.06)' : 'rgba(0,0,0,0.08)';
+        ctx.fillRect(0, y, 512, 2);
+      }
+      // Tatami brocade border (縁)
+      ctx.fillStyle = '#193524';
+      ctx.fillRect(0, 0, 512, 24);
+      ctx.fillRect(0, 488, 512, 24);
+      ctx.strokeStyle = '#d97706';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(0, 4, 512, 16);
+      ctx.strokeRect(0, 492, 512, 16);
+
+      const tex = new THREE.CanvasTexture(c);
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      tex.repeat.set(6, 6);
+      return tex;
+    }
+
+    // Tatami Floor Mesh
+    const tatamiGeo = new THREE.PlaneGeometry(80, 80);
+    const tatamiMat = new THREE.MeshStandardMaterial({
+      map: createTatamiTexture(),
+      roughness: 0.85,
+      metalness: 0.05
+    });
+    const tatamiMesh = new THREE.Mesh(tatamiGeo, tatamiMat);
+    tatamiMesh.rotation.x = -Math.PI / 2;
+    tatamiMesh.position.y = -BOARD_H - 0.6;
+    tatamiMesh.receiveShadow = true;
+    scene.add(tatamiMesh);
+
+    // Create High-Res Shogi Board Top Texture (Wood grain + 9x9 grid + highlighted outer 32-square track)
+    function createShogiBoardTexture() {
+      const c = document.createElement('canvas');
+      c.width = 1024;
+      c.height = 1024;
+      const ctx = c.getContext('2d');
+
+      // Kaya wood base gradient
+      const grad = ctx.createLinearGradient(0, 0, 1024, 1024);
+      grad.addColorStop(0, '#deb068');
+      grad.addColorStop(0.5, '#d39e52');
+      grad.addColorStop(1, '#c78f42');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, 1024, 1024);
+
+      // Subtle wood grain streaks
+      ctx.strokeStyle = 'rgba(120, 65, 15, 0.08)';
+      ctx.lineWidth = 3;
+      for (let i = 0; i < 140; i++) {
+        const x = (i / 140) * 1024;
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.bezierCurveTo(x + 18, 340, x - 18, 680, x + 5, 1024);
+        ctx.stroke();
+      }
+
+      const marginX = (0.4 / BOARD_W) * 1024;
+      const marginY = (0.4 / BOARD_D) * 1024;
+      const gridW = 1024 - marginX * 2;
+      const gridH = 1024 - marginY * 2;
+      const cw = gridW / 9;
+      const ch = gridH / 9;
+
+      // Highlight outer 32-square track & 4 corners
+      for (let r = 0; r < 9; r++) {
+        for (let col = 0; col < 9; col++) {
+          const isOuter = r === 0 || r === 8 || col === 0 || col === 8;
+          const isCorner = (r === 0 || r === 8) && (col === 0 || col === 8);
+          const x = marginX + col * cw;
+          const y = marginY + r * ch;
+
+          if (isCorner) {
+            ctx.fillStyle = 'rgba(245, 158, 11, 0.34)';
+            ctx.fillRect(x + 3, y + 3, cw - 6, ch - 6);
+            ctx.strokeStyle = 'rgba(217, 119, 6, 0.85)';
+            ctx.lineWidth = 4;
+            ctx.strokeRect(x + 6, y + 6, cw - 12, ch - 12);
+            // Corner Kanji badge
+            ctx.fillStyle = 'rgba(146, 64, 14, 0.55)';
+            ctx.font = '900 32px "Noto Serif JP", serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('角', x + cw / 2, y + ch / 2);
+          } else if (isOuter) {
+            ctx.fillStyle = 'rgba(254, 243, 199, 0.18)';
+            ctx.fillRect(x + 2, y + 2, cw - 4, ch - 4);
+          } else {
+            // Center throwing arena tint
+            ctx.fillStyle = 'rgba(92, 45, 12, 0.04)';
+            ctx.fillRect(x, y, cw, ch);
+          }
+        }
+      }
+
+      // Center throwing target watermark
+      ctx.save();
+      ctx.translate(512, 512);
+      ctx.strokeStyle = 'rgba(120, 53, 15, 0.16)';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.arc(0, 0, cw * 2.1, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(120, 53, 15, 0.14)';
+      ctx.font = '900 54px "Noto Serif JP", serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('金ころがし', 0, 0);
+      ctx.restore();
+
+      // Draw crisp black 9x9 Shogi grid lines
+      ctx.strokeStyle = '#1c130c';
+      ctx.lineWidth = 3.5;
+      for (let i = 0; i <= 9; i++) {
+        const vx = marginX + i * cw;
+        ctx.beginPath();
+        ctx.moveTo(vx, marginY);
+        ctx.lineTo(vx, marginY + gridH);
+        ctx.stroke();
+
+        const hy = marginY + i * ch;
+        ctx.beginPath();
+        ctx.moveTo(marginX, hy);
+        ctx.lineTo(marginX + gridW, hy);
+        ctx.stroke();
+      }
+
+      // 4 star points (星) at intersections (3,3), (3,6), (6,3), (6,6)
+      const stars = [[3, 3], [3, 6], [6, 3], [6, 6]];
+      ctx.fillStyle = '#1c130c';
+      stars.forEach(([sc, sr]) => {
+        ctx.beginPath();
+        ctx.arc(marginX + sc * cw, marginY + sr * ch, 6.5, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      const tex = new THREE.CanvasTexture(c);
+      tex.anisotropy = 8;
+      return tex;
+    }
+
+    // Build Shogi Board 3D Group
+    const boardGroup = new THREE.Group();
+    const sideWoodMat = new THREE.MeshStandardMaterial({ color: 0xb87d38, roughness: 0.55 });
+    const topBoardMat = new THREE.MeshStandardMaterial({
+      map: createShogiBoardTexture(),
+      roughness: 0.42,
+      metalness: 0.05
+    });
+
+    const boardGeo = new THREE.BoxGeometry(BOARD_W, BOARD_H, BOARD_D);
+    const boardMaterials = [
+      sideWoodMat, sideWoodMat,
+      topBoardMat, sideWoodMat,
+      sideWoodMat, sideWoodMat
+    ];
+    const boardMesh = new THREE.Mesh(boardGeo, boardMaterials);
+    boardMesh.position.y = -BOARD_H / 2;
+    boardMesh.receiveShadow = true;
+    boardMesh.castShadow = true;
+    boardGroup.add(boardMesh);
+
+    // 4 Carved Legs (くちなし脚)
+    const legGeo = new THREE.CylinderGeometry(0.45, 0.32, 0.7, 8);
+    const legMat = new THREE.MeshStandardMaterial({ color: 0x8f5b22, roughness: 0.6 });
+    const legCoords = [
+      [-BOARD_W * 0.36, -BOARD_D * 0.36],
+      [BOARD_W * 0.36, -BOARD_D * 0.36],
+      [-BOARD_W * 0.36, BOARD_D * 0.36],
+      [BOARD_W * 0.36, BOARD_D * 0.36]
+    ];
+    legCoords.forEach(([lx, lz]) => {
+      const leg = new THREE.Mesh(legGeo, legMat);
+      leg.position.set(lx, -BOARD_H - 0.3, lz);
+      leg.castShadow = true;
+      boardGroup.add(leg);
+    });
+    scene.add(boardGroup);
+
+    /**************************************************************************
+     * 6. COMPUTE OUTER 32 SQUARES COORDINATES (CLOCKWISE)
+     **************************************************************************/
+    // Grid rows r = 0..8 (North to South), cols c = 0..8 (West to East)
+    // Square 0: Bottom-Right Corner (r=8, c=8) -> clockwise around the perimeter:
+    // 0..8: bottom row right-to-left (r=8, c=8..0)
+    // 8..16: left col bottom-to-top (r=8..0, c=0)
+    // 16..24: top row left-to-right (r=0, c=0..8)
+    // 24..31: right col top-to-bottom (r=0..7, c=8)
+    const outerSquares = [];
+    function getCellWorldCenter(r, c) {
+      const x = (c - 4) * CELL_W;
+      const z = (r - 4) * CELL_D;
+      return new THREE.Vector3(x, BOARD_TOP_Y, z);
+    }
+
+    for (let c = 8; c >= 0; c--) outerSquares.push({ r: 8, c, pos: getCellWorldCenter(8, c), dirAngle: -Math.PI / 2 });
+    for (let r = 7; r >= 0; r--) outerSquares.push({ r, c: 0, pos: getCellWorldCenter(r, 0), dirAngle: 0 });
+    for (let c = 1; c <= 8; c++) outerSquares.push({ r: 0, c, pos: getCellWorldCenter(0, c), dirAngle: Math.PI / 2 });
+    for (let r = 1; r <= 7; r++) outerSquares.push({ r, c: 8, pos: getCellWorldCenter(r, 8), dirAngle: Math.PI });
+
+    // Add 3D Corner Pillars / Glowing Markers on the 4 Corner Squares (0, 8, 16, 24)
+    START_SQUARES.forEach((sqIdx, pSlot) => {
+      const sq = outerSquares[sqIdx];
+      const ringGeo = new THREE.RingGeometry(0.38, 0.48, 24);
+      const ringMat = new THREE.MeshBasicMaterial({
+        color: CHARACTERS[players[pSlot].charId].colorHex,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.7
+      });
+      const ring = new THREE.Mesh(ringGeo, ringMat);
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.set(sq.pos.x, BOARD_TOP_Y + 0.01, sq.pos.z);
+      scene.add(ring);
+    });
+
+    /**************************************************************************
+     * 7. SHOGI PIECE 3D GEOMETRY & CALLIGRAPHY TEXTURE GENERATOR
+     **************************************************************************/
+    // Dimensions of a thrown Gold General (金将) piece:
+    const KOMA_W = 0.78;  // Width (X)
+    const KOMA_H = 0.25;  // Thickness (Y when lying flat)
+    const KOMA_D = 0.94;  // Length (Z from base to tip)
+
+    // Create authentic pentagonal wedge-shaped Shogi piece BufferGeometry
+    function createShogiPieceGeometry(w = KOMA_W, h = KOMA_H, d = KOMA_D) {
+      const hw = w / 2;
+      const hd = d / 2;
+      const shoulderZ = -hd * 0.42;
+      const shoulderW = hw * 0.84;
+      const tipZ = -hd;
+
+      // Top face (y = +h * 0.42 at tip, +h * 0.5 at base for subtle wedge taper)
+      const yb = h * 0.5;
+      const ym = h * 0.43;
+      const yt = h * 0.34;
+
+      // 5 vertices on top, 5 vertices on bottom
+      // 0: bottom-left (-hw, +hd), 1: bottom-right (+hw, +hd),
+      // 2: shoulder-right (+shoulderW, shoulderZ), 3: tip (0, tipZ), 4: shoulder-left (-shoulderW, shoulderZ)
+      const topVerts = [
+        [-hw, yb, hd],
+        [hw, yb, hd],
+        [shoulderW, ym, shoulderZ],
+        [0, yt, tipZ],
+        [-shoulderW, ym, shoulderZ]
+      ];
+      const botVerts = [
+        [-hw, -yb, hd],
+        [hw, -yb, hd],
+        [shoulderW, -ym, shoulderZ],
+        [0, -yt, tipZ],
+        [-shoulderW, -ym, shoulderZ]
+      ];
+
+      const positions = [];
+      const uvs = [];
+      const groups = [];
+
+      function mapUV(x, z) {
+        return [(x + hw) / w, 1 - (z + hd) / d];
+      }
+
+      // Helper to push triangle
+      function pushTri(v1, v2, v3, uv1, uv2, uv3) {
+        positions.push(...v1, ...v2, ...v3);
+        uvs.push(...uv1, ...uv2, ...uv3);
+      }
+
+      // Group 0: Top Face (Front calligraphy face, 3 triangles: 0-1-2, 0-2-4, 4-2-3)
+      pushTri(topVerts[0], topVerts[1], topVerts[2], mapUV(topVerts[0][0], topVerts[0][2]), mapUV(topVerts[1][0], topVerts[1][2]), mapUV(topVerts[2][0], topVerts[2][2]));
+      pushTri(topVerts[0], topVerts[2], topVerts[4], mapUV(topVerts[0][0], topVerts[0][2]), mapUV(topVerts[2][0], topVerts[2][2]), mapUV(topVerts[4][0], topVerts[4][2]));
+      pushTri(topVerts[4], topVerts[2], topVerts[3], mapUV(topVerts[4][0], topVerts[4][2]), mapUV(topVerts[2][0], topVerts[2][2]), mapUV(topVerts[3][0], topVerts[3][2]));
+      groups.push({ start: 0, count: 9, materialIndex: 0 });
+
+      // Group 1: Bottom Face (Back blank face, 3 triangles reversed winding)
+      pushTri(botVerts[0], botVerts[2], botVerts[1], mapUV(-botVerts[0][0], botVerts[0][2]), mapUV(-botVerts[2][0], botVerts[2][2]), mapUV(-botVerts[1][0], botVerts[1][2]));
+      pushTri(botVerts[0], botVerts[4], botVerts[2], mapUV(-botVerts[0][0], botVerts[0][2]), mapUV(-botVerts[4][0], botVerts[4][2]), mapUV(-botVerts[2][0], botVerts[2][2]));
+      pushTri(botVerts[4], botVerts[3], botVerts[2], mapUV(-botVerts[4][0], botVerts[4][2]), mapUV(-botVerts[3][0], botVerts[3][2]), mapUV(-botVerts[2][0], botVerts[2][2]));
+      groups.push({ start: 9, count: 9, materialIndex: 1 });
+
+      // Group 2: 5 Side Edges
+      for (let i = 0; i < 5; i++) {
+        const next = (i + 1) % 5;
+        const t1 = topVerts[i];
+        const t2 = topVerts[next];
+        const b1 = botVerts[i];
+        const b2 = botVerts[next];
+        pushTri(t1, b1, b2, [0, 1], [0, 0], [1, 0]);
+        pushTri(t1, b2, t2, [0, 1], [1, 0], [1, 1]);
+      }
+      groups.push({ start: 18, count: 30, materialIndex: 2 });
+
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+      groups.forEach(g => geo.addGroup(g.start, g.count, g.materialIndex));
+      geo.computeVertexNormals();
+      return geo;
+    }
+
+    const pieceTextureCache = {};
+
+    function createPieceCalligraphyTexture(kanjiText, isBack = false, isGoldPiece = false) {
+      const key = `${kanjiText}_${isBack}_${isGoldPiece}`;
+      if (pieceTextureCache[key]) return pieceTextureCache[key];
+
+      const c = document.createElement('canvas');
+      c.width = 256;
+      c.height = 256;
+      const ctx = c.getContext('2d');
+
+      // Warm Tsugaru/Tendo boxwood color
+      const grad = ctx.createLinearGradient(0, 0, 256, 256);
+      grad.addColorStop(0, isGoldPiece ? '#f7d996' : '#f3cf8a');
+      grad.addColorStop(1, isGoldPiece ? '#dfb05b' : '#dcac56');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, 256, 256);
+
+      // Subtle vertical wood grain lines
+      ctx.strokeStyle = 'rgba(130, 75, 20, 0.1)';
+      ctx.lineWidth = 2;
+      for (let x = 0; x < 256; x += 6) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x + (Math.random() - 0.5) * 4, 256);
+        ctx.stroke();
+      }
+
+      if (!isBack && kanjiText) {
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const chars = kanjiText.split('');
+
+        // Gold shadow outline for luxury look
+        ctx.shadowColor = 'rgba(255, 235, 170, 0.7)';
+        ctx.shadowBlur = 2;
+
+        if (chars.length === 2) {
+          ctx.fillStyle = '#110c08';
+          ctx.font = '900 84px "Noto Serif JP", serif';
+          ctx.fillText(chars[0], 128, 96);
+          ctx.font = '900 88px "Noto Serif JP", serif';
+          ctx.fillText(chars[1], 128, 184);
+        } else {
+          ctx.fillStyle = '#110c08';
+          ctx.font = '900 105px "Noto Serif JP", serif';
+          ctx.fillText(kanjiText, 128, 142);
+        }
+      } else if (isBack) {
+        // Subtle wood seal mark on the back so blank back is still visually identifiable as the reverse side
+        ctx.strokeStyle = 'rgba(120, 65, 20, 0.22)';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(128, 150, 28, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      const tex = new THREE.CanvasTexture(c);
+      tex.anisotropy = 4;
+      pieceTextureCache[key] = tex;
+      return tex;
+    }
+
+    function createPieceMesh(kanjiText, isGoldPiece = false) {
+      const geo = createShogiPieceGeometry(KOMA_W, KOMA_H, KOMA_D);
+      const frontMat = new THREE.MeshStandardMaterial({
+        map: createPieceCalligraphyTexture(kanjiText, false, isGoldPiece),
+        roughness: 0.35,
+        metalness: isGoldPiece ? 0.15 : 0.05
+      });
+      const backMat = new THREE.MeshStandardMaterial({
+        map: createPieceCalligraphyTexture('', true, isGoldPiece),
+        roughness: 0.4,
+        metalness: 0.05
+      });
+      const sideMat = new THREE.MeshStandardMaterial({
+        color: isGoldPiece ? 0xdca850 : 0xd4a048,
+        roughness: 0.45
+      });
+
+      const mesh = new THREE.Mesh(geo, [frontMat, backMat, sideMat]);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      return mesh;
+    }
+
+    /**************************************************************************
+     * 8. CREATE THE 4 PLAYER PIECES ON THE PERIMETER TRACK
+     **************************************************************************/
+    const playerTokenGroups = [];
+    const labelsContainer = document.getElementById('labels-container');
+
+    function initPlayerTokens() {
+      // Clear existing if any
+      playerTokenGroups.forEach(g => scene.remove(g.group));
+      playerTokenGroups.length = 0;
+      labelsContainer.innerHTML = '';
+
+      players.forEach((p, idx) => {
+        const char = CHARACTERS[p.charId];
+        const group = new THREE.Group();
+
+        // Colored glowing base ring
+        const baseGeo = new THREE.CylinderGeometry(0.48, 0.54, 0.08, 24);
+        const baseMat = new THREE.MeshStandardMaterial({
+          color: char.colorHex,
+          emissive: char.colorHex,
+          emissiveIntensity: 0.35,
+          roughness: 0.3
+        });
+        const baseMesh = new THREE.Mesh(baseGeo, baseMat);
+        baseMesh.position.y = 0.04;
+        group.add(baseMesh);
+
+        // Shogi piece mesh
+        const ranks = gameRules.fastPromo ? RANKS_FAST : RANKS_FULL;
+        const rankObj = ranks[Math.min(p.rankIdx, ranks.length - 1)];
+        const pieceMesh = createPieceMesh(rankObj.kanji, false);
+        pieceMesh.position.y = 0.08 + KOMA_H / 2;
+        pieceMesh.scale.setScalar(rankObj.scale);
+        group.add(pieceMesh);
+
+        scene.add(group);
+
+        // Floating HTML Badge Label
+        const labelEl = document.createElement('div');
+        labelEl.className = 'piece-label flex flex-col items-center';
+        labelEl.innerHTML = `
+          <div class="px-2 py-0.5 rounded-full text-[11px] font-black shadow-md border border-white/40 flex items-center gap-1 ${char.badgeBg}">
+            <span>${char.avatar}</span>
+            <span>${char.name}</span>
+            <span class="bg-black/30 px-1.5 rounded text-[10px] serif-jp" id="label-rank-${idx}">${rankObj.short}</span>
+          </div>
+          <div class="w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-white/80"></div>
+        `;
+        labelsContainer.appendChild(labelEl);
+
+        playerTokenGroups.push({
+          group,
+          pieceMesh,
+          baseMat,
+          labelEl
+        });
+      });
+
+      syncAllPlayerTokenPositions();
+    }
+
+    function updatePlayerPieceAppearance(pIdx) {
+      const p = players[pIdx];
+      const token = playerTokenGroups[pIdx];
+      const char = CHARACTERS[p.charId];
+      const ranks = gameRules.fastPromo ? RANKS_FAST : RANKS_FULL;
+      const rankObj = ranks[Math.min(p.rankIdx, ranks.length - 1)];
+
+      token.baseMat.color.setHex(char.colorHex);
+      token.baseMat.emissive.setHex(char.colorHex);
+
+      // Update calligraphy texture on piece
+      token.pieceMesh.material[0].map = createPieceCalligraphyTexture(rankObj.kanji, false, false);
+      token.pieceMesh.material[0].needsUpdate = true;
+      token.pieceMesh.scale.setScalar(rankObj.scale);
+
+      // Update floating label
+      token.labelEl.innerHTML = `
+        <div class="px-2 py-0.5 rounded-full text-[11px] font-black shadow-md border border-white/40 flex items-center gap-1 ${char.badgeBg}">
+          <span>${char.avatar}</span>
+          <span>${char.name}</span>
+          <span class="bg-black/30 px-1.5 rounded text-[10px] serif-jp">${rankObj.short}</span>
+        </div>
+        <div class="w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-white/80"></div>
+      `;
+    }
+
+    // Calculate stack height when piggybacking (おんぶ) or sharing squares
+    function syncAllPlayerTokenPositions() {
+      players.forEach((p, idx) => {
+        const sq = outerSquares[p.currentSq];
+        const token = playerTokenGroups[idx];
+
+        // Count how many pieces are underneath this player in an onbu chain
+        let stackLevel = 0;
+        let curr = p.ridingOn;
+        const visited = new Set([idx]);
+        while (curr !== null && !visited.has(curr)) {
+          visited.add(curr);
+          stackLevel++;
+          curr = players[curr].ridingOn;
+        }
+
+        const targetY = BOARD_TOP_Y + stackLevel * (KOMA_H + 0.12);
+        token.group.position.set(sq.pos.x, targetY, sq.pos.z);
+        token.group.rotation.y = sq.dirAngle;
+      });
+    }
+
+    /**************************************************************************
+     * 9. CANNON.JS PHYSICS WORLD & THE 4 THROWN GOLD GENERALS (金将)
+     **************************************************************************/
+    const world = new CANNON.World();
+    world.gravity.set(0, -28, 0);
+    world.broadphase = new CANNON.NaiveBroadphase();
+    world.solver.iterations = 18;
+
+    const boardPhysMat = new CANNON.Material('boardMat');
+    const piecePhysMat = new CANNON.Material('pieceMat');
+
+    const boardPieceContact = new CANNON.ContactMaterial(boardPhysMat, piecePhysMat, {
+      friction: 0.42,
+      restitution: 0.34
+    });
+    const piecePieceContact = new CANNON.ContactMaterial(piecePhysMat, piecePhysMat, {
+      friction: 0.35,
+      restitution: 0.45
+    });
+    world.addContactMaterial(boardPieceContact);
+    world.addContactMaterial(piecePieceContact);
+
+    // Shogi Board Physics Body
+    const boardBody = new CANNON.Body({
+      mass: 0,
+      material: boardPhysMat,
+      shape: new CANNON.Box(new CANNON.Vec3(BOARD_W / 2, BOARD_H / 2, BOARD_D / 2))
+    });
+    boardBody.position.set(0, -BOARD_H / 2, 0);
+    world.addBody(boardBody);
+
+    // Tatami Floor Physics Body (to catch fallen "Shonben" pieces)
+    const floorBody = new CANNON.Body({
+      mass: 0,
+      material: boardPhysMat,
+      shape: new CANNON.Plane()
+    });
+    floorBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2);
+    floorBody.position.set(0, -BOARD_H - 0.6, 0);
+    world.addBody(floorBody);
+
+    // Create the 4 Gold General (金将) Thrown Pieces
+    const goldPieces = [];
+    for (let i = 0; i < 4; i++) {
+      const mesh = createPieceMesh('金将', true);
+      scene.add(mesh);
+
+      const halfExtents = new CANNON.Vec3(KOMA_W / 2, KOMA_H / 2, KOMA_D / 2);
+      const body = new CANNON.Body({
+        mass: 1.0,
+        material: piecePhysMat,
+        shape: new CANNON.Box(halfExtents),
+        linearDamping: 0.15,
+        angularDamping: 0.15
+      });
+
+      // Play wood clack sound on collision
+      let lastClackTime = 0;
+      body.addEventListener('collide', (ev) => {
+        const now = performance.now();
+        if (now - lastClackTime < 45) return;
+        const relVel = Math.abs(ev.contact.getImpactVelocityAlongNormal());
+        if (relVel > 1.1) {
+          lastClackTime = now;
+          playWoodClack(Math.min(1.0, relVel / 14), 0.92 + i * 0.05);
+        }
+      });
+
+      world.addBody(body);
+      goldPieces.push({
+        idx: i,
+        mesh,
+        body,
+        assistTargetPose: null, // null | 'side' | 'vertical' | 'inverted'
+        assistLocked: false
+      });
+    }
+
+    // Place the 4 Gold Pieces neatly in the center of the board before a roll
+    function resetGoldPiecesToCenter() {
+      const offsets = [
+        [-0.65, -0.45],
+        [0.65, -0.45],
+        [-0.65, 0.55],
+        [0.65, 0.55]
+      ];
+      goldPieces.forEach((gp, i) => {
+        gp.assistTargetPose = null;
+        gp.assistLocked = false;
+        gp.body.velocity.set(0, 0, 0);
+        gp.body.angularVelocity.set(0, 0, 0);
+        gp.body.position.set(offsets[i][0], BOARD_TOP_Y + KOMA_H / 2 + 0.02, offsets[i][1]);
+        gp.body.quaternion.setFromEuler(0, (Math.random() - 0.5) * 0.15, 0);
+        gp.mesh.position.copy(gp.body.position);
+        gp.mesh.quaternion.copy(gp.body.quaternion);
+      });
+    }
+    resetGoldPiecesToCenter();
+
+    /**************************************************************************
+     * 10. THROW MECHANICS & STANDING ASSIST ENGINE
+     **************************************************************************/
+    let rollStartTime = 0;
+    let settleFrames = 0;
+
+    function throwGoldPieces(dirVecX, dirVecZ, powerMultiplier = 1.0, spinMultiplier = 1.0, spreadMultiplier = 1.0) {
+      if (gameState !== 'IDLE') return;
+      ensureAudioCtx();
+      gameState = 'ROLLING';
+      rollStartTime = performance.now();
+      settleFrames = 0;
+
+      document.getElementById('result-banner').classList.add('hidden');
+      const activePlayer = players[currentTurnIdx];
+      speakCharacter(activePlayer.charId, 'throw', currentTurnIdx);
+
+      // Determine Standing Assist probabilities based on gameRules.assistMode & throw style
+      // 'real': natural physics + tiny balance help
+      // 'entame': fun, dramatic rate of 横立ち(5), 縦立ち(10), 逆立ち(20)
+      // 'chaos': high frequency of standing & wild rolls
+      let standChance = 0.03;
+      if (gameRules.assistMode === 'entame') standChance = 0.22;
+      if (gameRules.assistMode === 'chaos') standChance = 0.48;
+
+      // Boost chance if player used Spin or Power technique
+      if (spinMultiplier > 1.2) standChance *= 1.35;
+      if (powerMultiplier > 1.2) standChance *= 1.3;
+
+      goldPieces.forEach((gp, i) => {
+        gp.assistTargetPose = null;
+        gp.assistLocked = false;
+
+        // Decide if this specific piece gets a standing balance assist when landing
+        if (Math.random() < standChance) {
+          const r = Math.random();
+          if (powerMultiplier > 1.25 && r < 0.25) {
+            gp.assistTargetPose = 'inverted'; // 逆立ち 20点
+          } else if (powerMultiplier > 1.15 && r < 0.58) {
+            gp.assistTargetPose = 'vertical'; // 縦立ち 10点
+          } else {
+            gp.assistTargetPose = 'side';     // 横立ち 5点
+          }
+        }
+
+        // Start from player's side of the board and toss towards center
+        const startSpreadX = (i - 1.5) * 0.58 * spreadMultiplier;
+        const startSpreadZ = ((i % 2) - 0.5) * 0.42 * spreadMultiplier;
+
+        const originX = -dirVecX * 2.6 + startSpreadX;
+        const originZ = -dirVecZ * 2.6 + startSpreadZ;
+        const originY = 1.85 + i * 0.16;
+
+        gp.body.position.set(originX, originY, originZ);
+        gp.body.quaternion.setFromEuler(
+          Math.random() * Math.PI * 2,
+          Math.random() * Math.PI * 2,
+          Math.random() * Math.PI * 2
+        );
+
+        const baseSpeed = 4.6 * powerMultiplier;
+        const vx = dirVecX * baseSpeed + (Math.random() - 0.5) * 2.4 * spreadMultiplier;
+        const vz = dirVecZ * baseSpeed + (Math.random() - 0.5) * 2.4 * spreadMultiplier;
+        const vy = 1.8 + Math.random() * 1.6 * powerMultiplier;
+
+        gp.body.velocity.set(vx, vy, vz);
+        gp.body.angularVelocity.set(
+          (Math.random() - 0.5) * 18 * spinMultiplier,
+          (Math.random() - 0.5) * 14 * spinMultiplier,
+          (Math.random() - 0.5) * 22 * spinMultiplier
+        );
+      });
+
+      updateTurnUI();
+    }
+
+    // Apply subtle physical torque/orientation snap during landing for pieces designated to stand
+    function applyStandingAssistStep() {
+      goldPieces.forEach((gp) => {
+        const b = gp.body;
+        // Only assist if the piece is still on the Shogi board surface
+        const onBoard = Math.abs(b.position.x) < BOARD_W / 2 - 0.3 &&
+                        Math.abs(b.position.z) < BOARD_D / 2 - 0.3 &&
+                        b.position.y > -0.2 && b.position.y < 1.2;
+
+        if (!onBoard) return;
+
+        const speed = b.velocity.length();
+
+        // Natural angle detection in 'real' mode: if piece happens to be nearly standing on edge, help it balance
+        if (!gp.assistTargetPose && speed < 1.8 && speed > 0.15) {
+          const q = new THREE.Quaternion(b.quaternion.x, b.quaternion.y, b.quaternion.z, b.quaternion.w);
+          const rightY = Math.abs(new THREE.Vector3(1, 0, 0).applyQuaternion(q).y);
+          const fwdY = new THREE.Vector3(0, 0, -1).applyQuaternion(q).y;
+          const threshold = gameRules.assistMode === 'real' ? 0.90 : 0.78;
+          if (rightY > threshold) gp.assistTargetPose = 'side';
+          else if (fwdY < -threshold) gp.assistTargetPose = 'vertical';
+          else if (fwdY > threshold + 0.05) gp.assistTargetPose = 'inverted';
+        }
+
+        if (gp.assistTargetPose && speed < 2.2) {
+          const yaw = Math.atan2(b.velocity.x, b.velocity.z) || 0;
+          const targetQuat = new THREE.Quaternion();
+          let standHeight = KOMA_H / 2;
+
+          if (gp.assistTargetPose === 'side') {
+            // 横立ち: rolled 90 deg on Z
+            targetQuat.setFromEuler(new THREE.Euler(0, yaw, Math.PI / 2, 'YXZ'));
+            standHeight = KOMA_W / 2;
+          } else if (gp.assistTargetPose === 'vertical') {
+            // 縦立ち: pitched +90 deg on X so base faces down (-Y) and tip faces up (+Y)
+            targetQuat.setFromEuler(new THREE.Euler(Math.PI / 2, yaw, 0, 'YXZ'));
+            standHeight = KOMA_D / 2;
+          } else if (gp.assistTargetPose === 'inverted') {
+            // 逆立ち: pitched -90 deg on X so pointed tip touches board
+            targetQuat.setFromEuler(new THREE.Euler(-Math.PI / 2, yaw, 0, 'YXZ'));
+            standHeight = KOMA_D / 2;
+          }
+
+          const curQuat = new THREE.Quaternion(b.quaternion.x, b.quaternion.y, b.quaternion.z, b.quaternion.w);
+          curQuat.slerp(targetQuat, 0.22);
+          b.quaternion.set(curQuat.x, curQuat.y, curQuat.z, curQuat.w);
+
+          // Dampen angular & horizontal velocity so it balances dramatically on its edge
+          b.angularVelocity.scale(0.65, b.angularVelocity);
+          b.velocity.x *= 0.85;
+          b.velocity.z *= 0.85;
+          if (b.position.y < standHeight) {
+            b.position.y = standHeight;
+          }
+        }
+      });
+    }
+
+    /**************************************************************************
+     * 11. EVALUATE GOLD PIECE OUTCOMES (表/裏/横立ち/縦立ち/逆立ち/ションベン/山)
+     **************************************************************************/
+    function evaluateRollResult() {
+      let isShonben = false;
+      let isStacked = false;
+      const pieceStates = [];
+
+      // 1. Check each piece orientation & board bounds
+      goldPieces.forEach((gp, idx) => {
+        const pos = gp.body.position;
+        const q = new THREE.Quaternion(gp.body.quaternion.x, gp.body.quaternion.y, gp.body.quaternion.z, gp.body.quaternion.w);
+
+        // Out of bounds check (ションベン)
+        if (pos.y < -0.15 || Math.abs(pos.x) > BOARD_W / 2 || Math.abs(pos.z) > BOARD_D / 2) {
+          isShonben = true;
+          pieceStates.push({ idx, label: '盤外落下', pts: 0, color: 'bg-red-600 text-white' });
+          return;
+        }
+
+        // Local axes transformed to world space
+        const upVec = new THREE.Vector3(0, 1, 0).applyQuaternion(q);    // +Y: Front face ("金将")
+        const rightVec = new THREE.Vector3(1, 0, 0).applyQuaternion(q); // +-X: Side edge
+        const tipVec = new THREE.Vector3(0, 0, -1).applyQuaternion(q);  // -Z: Pointed tip
+
+        if (tipVec.y < -0.72) {
+          // Pointed tip is pointing straight down -> 逆立ち (20点)
+          pieceStates.push({ idx, type: 'inverted', label: '逆立ち(20)', pts: 20, color: 'bg-purple-600 text-white' });
+        } else if (tipVec.y > 0.72) {
+          // Pointed tip is pointing straight up (base on board) -> 縦立ち (10点)
+          pieceStates.push({ idx, type: 'vertical', label: '縦立ち(10)', pts: 10, color: 'bg-cyan-500 text-stone-950' });
+        } else if (Math.abs(rightVec.y) > 0.72) {
+          // Side edge is vertical -> 横立ち (5点)
+          pieceStates.push({ idx, type: 'side', label: '横立ち(5)', pts: 5, color: 'bg-pink-500 text-white' });
+        } else if (upVec.y >= 0) {
+          // Front ("金将") is up -> 表 (1点)
+          pieceStates.push({ idx, type: 'front', label: '表(1)', pts: 1, color: 'bg-amber-400 text-stone-950' });
+        } else {
+          // Blank back is up -> 裏 (0点)
+          pieceStates.push({ idx, type: 'back', label: '裏(0)', pts: 0, color: 'bg-stone-700 text-stone-200' });
+        }
+      });
+
+      // 2. Check for overlapping/stacked pieces (山・重なり) if not Shonben
+      if (!isShonben) {
+        for (let i = 0; i < 4; i++) {
+          for (let j = i + 1; j < 4; j++) {
+            const pA = goldPieces[i].body.position;
+            const pB = goldPieces[j].body.position;
+            const dx = pA.x - pB.x;
+            const dz = pA.z - pB.z;
+            const horizDist = Math.hypot(dx, dz);
+            const vertDiff = Math.abs(pA.y - pB.y);
+            // If two flat pieces are horizontally overlapping and one is resting higher
+            if (horizDist < 0.62 && vertDiff > 0.14) {
+              isStacked = true;
+            }
+          }
+        }
+      }
+
+      // 3. Calculate Total Score & Special Bonuses
+      let totalMove = 0;
+      let badgeText = '出目確定';
+      let titleText = '';
+      let isStandBonus = false;
+      const allBack = !isShonben && !isStacked && pieceStates.every(ps => ps.type === 'back');
+      const rawSum = pieceStates.reduce((acc, ps) => acc + ps.pts, 0);
+
+      if (isShonben) {
+        totalMove = 0;
+        badgeText = '⚠️ ションベン（盤外落下）';
+        titleText = '0点（1回休み！）';
+        playFailSound();
+        speakCharacter(players[currentTurnIdx].charId, 'fail', currentTurnIdx);
+      } else if (isStacked) {
+        if (gameRules.stackBackward) {
+          const backSteps = Math.max(1, rawSum);
+          totalMove = -backSteps;
+          badgeText = '⛰️ 山（駒の重なりペナルティ）';
+          titleText = `${backSteps} マス後退！`;
+        } else {
+          totalMove = 0;
+          badgeText = '⛰️ 山（駒の重なり）';
+          titleText = '0点（やり直し無し）';
+        }
+        playFailSound();
+        speakCharacter(players[currentTurnIdx].charId, 'fail', currentTurnIdx);
+      } else if (allBack) {
+        totalMove = 8;
+        badgeText = '✨ 全裏ボーナス成立！';
+        titleText = '8 マス進む！';
+        playStandChime(2);
+        speakCharacter(players[currentTurnIdx].charId, 'stand', currentTurnIdx);
+      } else {
+        totalMove = rawSum;
+        const hasStand = pieceStates.some(ps => ps.pts >= 5);
+        if (hasStand) {
+          isStandBonus = true;
+          badgeText = '🔥 奇跡の駒立ち成功！！';
+          titleText = `${totalMove} マス進む！`;
+          playStandChime(totalMove >= 10 ? 2 : 1);
+          speakCharacter(players[currentTurnIdx].charId, 'stand', currentTurnIdx);
+        } else {
+          badgeText = '出目確定';
+          titleText = `${totalMove} マス進む！`;
+          speakCharacter(players[currentTurnIdx].charId, 'normalGood', currentTurnIdx);
+        }
+      }
+
+      // Display Result Banner
+      const banner = document.getElementById('result-banner');
+      document.getElementById('result-badge').textContent = badgeText;
+      document.getElementById('result-title').textContent = titleText;
+      const breakdownEl = document.getElementById('result-breakdown');
+      breakdownEl.innerHTML = pieceStates.map(ps =>
+        `<span class="px-2.5 py-0.5 rounded-full font-black shadow ${ps.color}">${ps.label}</span>`
+      ).join('');
+      banner.classList.remove('hidden');
+
+      // Mirror onto Recording Composite Canvas HUD
+      activeResultOverlay.visible = true;
+      activeResultOverlay.badge = badgeText;
+      activeResultOverlay.title = titleText;
+      activeResultOverlay.pieces = pieceStates;
+
+      // Proceed to piece movement on the perimeter track
+      setTimeout(() => {
+        banner.classList.add('hidden');
+        activeResultOverlay.visible = false;
+        executeBoardMovement(currentTurnIdx, totalMove);
+      }, 1900 / gameSpeed);
+    }
+
+    /**************************************************************************
+     * 12. PERIMETER MOVEMENT, ONBU (PIGGYBACK), CORNER WARP & PROMOTION
+     **************************************************************************/
+    // Get all players stacked on top of `basePlayerIdx` (including `basePlayerIdx` itself)
+    function getMoveStack(basePlayerIdx) {
+      const stack = [basePlayerIdx];
+      let curr = players[basePlayerIdx].rider;
+      const visited = new Set([basePlayerIdx]);
+      while (curr !== null && !visited.has(curr)) {
+        visited.add(curr);
+        stack.push(curr);
+        curr = players[curr].rider;
+      }
+      return stack;
+    }
+
+    // Detach a player from whoever they were riding on when it's their own turn to move
+    function detachFromBelow(pIdx) {
+      const belowIdx = players[pIdx].ridingOn;
+      if (belowIdx !== null) {
+        players[belowIdx].rider = null;
+        players[pIdx].ridingOn = null;
+      }
+    }
+
+    async function sleep(ms) {
+      return new Promise(res => setTimeout(res, ms / gameSpeed));
+    }
+
+    function cycleGameSpeed() {
+      const speeds = [1.0, 1.5, 2.0];
+      const nextIdx = (speeds.indexOf(gameSpeed) + 1) % speeds.length;
+      gameSpeed = speeds[nextIdx];
+      document.getElementById('speed-label').textContent = `${gameSpeed.toFixed(1)}x`;
+    }
+
+    async function executeBoardMovement(pIdx, steps) {
+      gameState = 'MOVING';
+      const p = players[pIdx];
+
+      if (steps === 0) {
+        await sleep(500);
+        advanceToNextTurn();
+        return;
+      }
+
+      // If this player was riding on someone else, moving on their own detaches them from below
+      // (Anyone riding on TOP of `pIdx` stays on `pIdx` and moves with them!)
+      detachFromBelow(pIdx);
+      const movingGroup = getMoveStack(pIdx);
+
+      const dir = steps > 0 ? 1 : -1;
+      const absSteps = Math.abs(steps);
+
+      for (let s = 0; s < absSteps; s++) {
+        movingGroup.forEach(mIdx => {
+          const mp = players[mIdx];
+          const prevSq = mp.currentSq;
+          mp.currentSq = (mp.currentSq + dir + 32) % 32;
+
+          // Check if this player passed or landed on their own home corner going forward
+          if (dir > 0 && mp.currentSq === mp.startSq) {
+            promotePlayer(mIdx);
+          }
+        });
+
+        playWoodClack(0.65, 1.15);
+        syncAllPlayerTokenPositions();
+        renderPlayerCards();
+
+        // Check if anyone in movingGroup reached 王将 and completed a lap or promoted to win
+        const winnerIdx = movingGroup.find(mIdx => {
+          const ranks = gameRules.fastPromo ? RANKS_FAST : RANKS_FULL;
+          return players[mIdx].rankIdx >= ranks.length;
+        });
+        if (winnerIdx !== undefined) {
+          triggerVictory(winnerIdx);
+          return;
+        }
+
+        await sleep(165);
+      }
+
+      // Check Corner Warp (角ワープ): if landed on one of the 4 corners (0, 8, 16, 24)
+      if (gameRules.cornerWarp && steps > 0 && START_SQUARES.includes(p.currentSq)) {
+        await sleep(300);
+        playFanfare();
+        speakCharacter(p.charId, 'promote', pIdx);
+
+        // Show Corner Warp notice
+        const banner = document.getElementById('result-banner');
+        document.getElementById('result-badge').textContent = '⚡ 角ワープ発動！';
+        document.getElementById('result-title').textContent = '次の角へ +8マス飛躍！';
+        document.getElementById('result-breakdown').innerHTML = `<span class="text-amber-300 font-bold">四隅の角にピッタリ停止ボーナス！</span>`;
+        banner.classList.remove('hidden');
+
+        activeResultOverlay.visible = true;
+        activeResultOverlay.badge = '⚡ 角ワープ発動！';
+        activeResultOverlay.title = '次の角へ +8マス飛躍！';
+        activeResultOverlay.pieces = [{ label: '四隅ボーナス +8マス', color: 'bg-amber-500' }];
+
+        await sleep(1100);
+        banner.classList.add('hidden');
+        activeResultOverlay.visible = false;
+
+        for (let w = 0; w < 8; w++) {
+          movingGroup.forEach(mIdx => {
+            const mp = players[mIdx];
+            mp.currentSq = (mp.currentSq + 1) % 32;
+            if (mp.currentSq === mp.startSq) {
+              promotePlayer(mIdx);
+            }
+          });
+          playWoodClack(0.5, 1.3 + w * 0.04);
+          syncAllPlayerTokenPositions();
+          renderPlayerCards();
+
+          const winnerIdx = movingGroup.find(mIdx => {
+            const ranks = gameRules.fastPromo ? RANKS_FAST : RANKS_FULL;
+            return players[mIdx].rankIdx >= ranks.length;
+          });
+          if (winnerIdx !== undefined) {
+            triggerVictory(winnerIdx);
+            return;
+          }
+          await sleep(85);
+        }
+      }
+
+      // Check Onbu (おんぶ): Did we land on a square occupied by another player not in our stack?
+      if (gameRules.onbu) {
+        const targetBelow = players.find((other, oIdx) =>
+          oIdx !== pIdx &&
+          other.control !== 'off' &&
+          !movingGroup.includes(oIdx) &&
+          other.currentSq === p.currentSq &&
+          other.rider === null // Top of that stack
+        );
+
+        if (targetBelow) {
+          targetBelow.rider = pIdx;
+          p.ridingOn = targetBelow.slot;
+          syncAllPlayerTokenPositions();
+          renderPlayerCards();
+          playStandChime(1);
+          speakCharacter(p.charId, 'onbuSuccess', pIdx);
+          await sleep(1600);
+          speakCharacter(targetBelow.charId, 'onbuReceived', targetBelow.slot);
+          await sleep(1200);
+        }
+      }
+
+      await sleep(450);
+      advanceToNextTurn();
+    }
+
+    function promotePlayer(pIdx) {
+      const p = players[pIdx];
+      const ranks = gameRules.fastPromo ? RANKS_FAST : RANKS_FULL;
+      p.laps++;
+      p.rankIdx++;
+
+      if (p.rankIdx < ranks.length) {
+        playFanfare();
+        updatePlayerPieceAppearance(pIdx);
+        speakCharacter(p.charId, 'promote', pIdx);
+      }
+    }
+
+    function triggerVictory(winnerIdx) {
+      gameState = 'GAMEOVER';
+      playFanfare();
+      const winner = players[winnerIdx];
+      const char = CHARACTERS[winner.charId];
+      const quote = speakCharacter(winner.charId, 'promote', winnerIdx);
+
+      document.getElementById('victory-title').textContent = `P${winnerIdx + 1}: ${char.name} の完全勝利！`;
+      document.getElementById('victory-quote').textContent = `「${quote}」`;
+      document.getElementById('victory-modal').classList.remove('hidden');
+    }
+
+    function closeVictoryAndRestart() {
+      document.getElementById('victory-modal').classList.add('hidden');
+      resetMatch();
+    }
+
+    /**************************************************************************
+     * 13. TURN MANAGEMENT, UI RENDERING & CPU AI THROW LOGIC
+     **************************************************************************/
+    let cpuThrowTimer = null;
+
+    function getPlayerThrowDirection(slotIdx) {
+      // Throw from the player's home corner toward the center of the Shogi board
+      const sq = outerSquares[START_SQUARES[slotIdx]];
+      const vec = new THREE.Vector3(-sq.pos.x, 0, -sq.pos.z).normalize();
+      return { x: vec.x, z: vec.z };
+    }
+
+    function renderPlayerCards() {
+      const bar = document.getElementById('player-cards-bar');
+      if (!bar) return;
+      const ranks = gameRules.fastPromo ? RANKS_FAST : RANKS_FULL;
+
+      bar.innerHTML = players.map((p, idx) => {
+        const char = CHARACTERS[p.charId];
+        const isTurn = idx === currentTurnIdx && gameState !== 'GAMEOVER';
+        const rankObj = ranks[Math.min(p.rankIdx, ranks.length - 1)];
+        const remSquares = (p.startSq - p.currentSq + 32) % 32 || 32;
+
+        const onbuBadge = p.ridingOn !== null
+          ? `<span class="bg-pink-600/80 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold">P${p.ridingOn + 1}におんぶ中</span>`
+          : (p.rider !== null
+            ? `<span class="bg-amber-600/80 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold">P${p.rider + 1}を運搬中</span>`
+            : `<span class="text-[10px] text-stone-400">昇格まで残り<strong class="text-amber-300 ml-0.5">${remSquares}</strong>マス</span>`);
+
+        const controlBadge = p.control === 'human'
+          ? `<button onclick="togglePlayerControl(${idx})" class="bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] px-2 py-0.5 rounded-md font-black transition shadow" title="クリックで人間/CPU切替">👤 人間</button>`
+          : `<button onclick="togglePlayerControl(${idx})" class="bg-sky-700 hover:bg-sky-600 text-sky-100 text-[10px] px-2 py-0.5 rounded-md font-black transition shadow" title="クリックで人間/CPU切替">🤖 CPU</button>`;
+
+        return `
+          <div class="rounded-2xl p-2.5 transition-all border ${
+            isTurn
+              ? 'bg-gradient-to-r from-amber-950/95 via-stone-900/95 to-stone-900/95 border-amber-400 shadow-[0_0_20px_rgba(251,191,36,0.35)] scale-[1.01]'
+              : 'bg-stone-900/80 border-stone-700/70 opacity-90'
+          } backdrop-blur-md flex items-center justify-between gap-2">
+            <div class="flex items-center gap-2.5 min-w-0">
+              <button onclick="speakCharacter('${p.charId}', 'turnStart', ${idx})" class="w-10 h-10 rounded-xl flex items-center justify-center text-xl shrink-0 border shadow-inner transition hover:scale-105" style="background-color: ${char.ringColor}28; border-color: ${char.ringColor};" title="クリックでボイス再生">
+                ${char.avatar}
+              </button>
+              <div class="min-w-0">
+                <div class="flex items-center gap-1.5 flex-wrap">
+                  <span class="text-xs font-black text-white truncate">P${idx + 1}: ${char.name}</span>
+                  ${controlBadge}
+                </div>
+                <div class="flex items-center gap-1.5 mt-0.5">
+                  ${onbuBadge}
+                </div>
+              </div>
+            </div>
+            <div class="flex flex-col items-end shrink-0">
+              <div class="px-2.5 py-1 rounded-xl bg-gradient-to-b from-amber-300 to-amber-600 text-stone-950 font-black text-sm serif-jp shadow border border-amber-200">
+                ${rankObj.kanji}
+              </div>
+              <span class="text-[9px] text-stone-400 mt-0.5">${CORNER_NAMES[idx]}</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function togglePlayerControl(slotIdx) {
+      const p = players[slotIdx];
+      p.control = p.control === 'human' ? 'cpu' : 'human';
+      renderPlayerCards();
+      updateTurnUI();
+      if (slotIdx === currentTurnIdx && gameState === 'IDLE' && p.control === 'cpu') {
+        scheduleCpuThrow(slotIdx);
+      } else if (slotIdx === currentTurnIdx && p.control === 'human' && cpuThrowTimer) {
+        clearTimeout(cpuThrowTimer);
+        cpuThrowTimer = null;
+      }
+    }
+
+    function updateTurnUI() {
+      const p = players[currentTurnIdx];
+      const char = CHARACTERS[p.charId];
+      const ranks = gameRules.fastPromo ? RANKS_FAST : RANKS_FULL;
+      const rankObj = ranks[Math.min(p.rankIdx, ranks.length - 1)];
+
+      const iconEl = document.getElementById('turn-icon');
+      const labelEl = document.getElementById('turn-player-label');
+      const badgeEl = document.getElementById('turn-piece-badge');
+      const instEl = document.getElementById('turn-instruction');
+      const humanBtns = document.getElementById('human-buttons');
+
+      iconEl.textContent = char.avatar;
+      iconEl.style.backgroundColor = char.ringColor;
+      labelEl.textContent = `P${currentTurnIdx + 1}: ${char.name} の番`;
+      badgeEl.textContent = `現在：${rankObj.kanji}`;
+
+      const canHumanThrow = gameState === 'IDLE' && p.control === 'human';
+      if (gameState === 'IDLE') {
+        if (p.control === 'human') {
+          instEl.innerHTML = `<i class="fa-solid fa-hand-pointer text-amber-400 mr-1"></i>盤面をスワイプして投げるか、右の投擲ボタンを押してください`;
+        } else {
+          instEl.innerHTML = `<i class="fa-solid fa-robot text-sky-400 mr-1"></i>CPU（${char.name}）が金将を構えています…`;
+        }
+      } else if (gameState === 'ROLLING' || gameState === 'EVALUATING') {
+        instEl.innerHTML = `<i class="fa-solid fa-dice text-yellow-400 mr-1 animate-spin"></i>金将が転がっています…出目判定中！`;
+      } else if (gameState === 'MOVING') {
+        instEl.innerHTML = `<i class="fa-solid fa-chess-pawn text-emerald-400 mr-1"></i>外周マスを移動中…`;
+      }
+
+      if (humanBtns) {
+        humanBtns.style.opacity = canHumanThrow ? '1' : '0.4';
+        humanBtns.style.pointerEvents = canHumanThrow ? 'auto' : 'none';
+      }
+    }
+
+    function startTurn(turnIdx) {
+      if (cpuThrowTimer) {
+        clearTimeout(cpuThrowTimer);
+        cpuThrowTimer = null;
+      }
+      currentTurnIdx = turnIdx;
+      const p = players[currentTurnIdx];
+
+      if (p.control === 'off') {
+        advanceToNextTurn();
+        return;
+      }
+
+      gameState = 'IDLE';
+      resetGoldPiecesToCenter();
+      renderPlayerCards();
+      updateTurnUI();
+
+      speakCharacter(p.charId, 'turnStart', currentTurnIdx);
+
+      if (p.control === 'cpu') {
+        scheduleCpuThrow(currentTurnIdx);
+      }
+    }
+
+    function scheduleCpuThrow(slotIdx) {
+      if (cpuThrowTimer) clearTimeout(cpuThrowTimer);
+      cpuThrowTimer = setTimeout(() => {
+        if (gameState !== 'IDLE' || currentTurnIdx !== slotIdx) return;
+        const p = players[slotIdx];
+        const char = CHARACTERS[p.charId];
+        const dir = getPlayerThrowDirection(slotIdx);
+        const prof = char.throwProfile;
+
+        const jitterAngle = (Math.random() - 0.5) * 0.35;
+        const cosA = Math.cos(jitterAngle);
+        const sinA = Math.sin(jitterAngle);
+        const dx = dir.x * cosA - dir.z * sinA;
+        const dz = dir.x * sinA + dir.z * cosA;
+
+        throwGoldPieces(dx, dz, prof.power, prof.spin, prof.spread);
+      }, 1250 / gameSpeed);
+    }
+
+    function advanceToNextTurn() {
+      if (gameState === 'GAMEOVER') return;
+      let nextIdx = (currentTurnIdx + 1) % 4;
+      let guard = 0;
+      while (players[nextIdx].control === 'off' && guard < 4) {
+        nextIdx = (nextIdx + 1) % 4;
+        guard++;
+      }
+      startTurn(nextIdx);
+    }
+
+    function triggerHumanPresetThrow(presetType) {
+      if (gameState !== 'IDLE') return;
+      const p = players[currentTurnIdx];
+      if (p.control !== 'human') return;
+
+      const dir = getPlayerThrowDirection(currentTurnIdx);
+      let power = 1.0, spin = 1.0, spread = 1.0;
+
+      if (presetType === 'spin') {
+        power = 0.94;
+        spin = 1.65;
+        spread = 0.85;
+      } else if (presetType === 'power') {
+        power = 1.34;
+        spin = 1.25;
+        spread = 1.25;
+      } else if (presetType === 'careful') {
+        power = 0.72;
+        spin = 0.45;
+        spread = 0.55;
+      }
+
+      throwGoldPieces(dir.x, dir.z, power, spin, spread);
+    }
+
+    /**************************************************************************
+     * 14. SWIPE TO THROW & INTERACTIVE 3D CAMERA CONTROLS
+     **************************************************************************/
+    let isPointerDown = false;
+    let pointerStartX = 0;
+    let pointerStartY = 0;
+    let isSwipeAiming = false;
+    let cameraOrbitAngle = 0;
+    let cameraPitchOffset = 0;
+
+    const swipeSvg = document.getElementById('swipe-svg');
+    const swipeLine = document.getElementById('swipe-line');
+    const swipeStartCircle = document.getElementById('swipe-start');
+    const swipeEndCircle = document.getElementById('swipe-end');
+
+    renderer.domElement.addEventListener('pointerdown', (e) => {
+      ensureAudioCtx();
+      isPointerDown = true;
+      pointerStartX = e.clientX;
+      pointerStartY = e.clientY;
+
+      const activePlayer = players[currentTurnIdx];
+      if (gameState === 'IDLE' && activePlayer && activePlayer.control === 'human' && e.button === 0) {
+        isSwipeAiming = true;
+        swipeSvg.classList.remove('hidden');
+        swipeStartCircle.setAttribute('cx', pointerStartX);
+        swipeStartCircle.setAttribute('cy', pointerStartY);
+        swipeEndCircle.setAttribute('cx', pointerStartX);
+        swipeEndCircle.setAttribute('cy', pointerStartY);
+        swipeLine.setAttribute('x1', pointerStartX);
+        swipeLine.setAttribute('y1', pointerStartY);
+        swipeLine.setAttribute('x2', pointerStartX);
+        swipeLine.setAttribute('y2', pointerStartY);
+      } else {
+        isSwipeAiming = false;
+      }
+    });
+
+    window.addEventListener('pointermove', (e) => {
+      if (!isPointerDown) return;
+      const dx = e.clientX - pointerStartX;
+      const dy = e.clientY - pointerStartY;
+
+      if (isSwipeAiming) {
+        swipeEndCircle.setAttribute('cx', e.clientX);
+        swipeEndCircle.setAttribute('cy', e.clientY);
+        swipeLine.setAttribute('x2', e.clientX);
+        swipeLine.setAttribute('y2', e.clientY);
+      } else {
+        // Orbit camera manually
+        cameraOrbitAngle -= dx * 0.006;
+        cameraPitchOffset = Math.max(-0.4, Math.min(0.4, cameraPitchOffset + dy * 0.004));
+        pointerStartX = e.clientX;
+        pointerStartY = e.clientY;
+      }
+    });
+
+    window.addEventListener('pointerup', (e) => {
+      if (!isPointerDown) return;
+      isPointerDown = false;
+
+      if (isSwipeAiming) {
+        isSwipeAiming = false;
+        swipeSvg.classList.add('hidden');
+
+        const dx = e.clientX - pointerStartX;
+        const dy = e.clientY - pointerStartY;
+        const dist = Math.hypot(dx, dy);
+
+        if (dist > 28 && gameState === 'IDLE' && players[currentTurnIdx].control === 'human') {
+          // Convert screen swipe vector to camera-aligned horizontal world vector
+          const forward = new THREE.Vector3();
+          camera.getWorldDirection(forward);
+          forward.y = 0;
+          if (forward.lengthSq() < 0.001) forward.set(0, 0, -1);
+          forward.normalize();
+
+          const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
+
+          const ndx = dx / dist;
+          const ndy = -dy / dist; // Upward screen swipe = forward in 3D space
+
+          const worldDir = new THREE.Vector3()
+            .addScaledVector(right, ndx)
+            .addScaledVector(forward, ndy)
+            .normalize();
+
+          const power = Math.min(1.45, Math.max(0.68, dist / 210));
+          const spin = 0.9 + Math.abs(ndx) * 0.85;
+          throwGoldPieces(worldDir.x, worldDir.z, power, spin, 1.0);
+        }
+      }
+    });
+
+    function cycleCameraMode() {
+      cameraMode = (cameraMode + 1) % 3;
+      const labels = ['斜め俯瞰', '真上俯瞰', 'ダイナミック追従'];
+      document.getElementById('camera-label').textContent = labels[cameraMode];
+    }
+
+    const cameraTargetPos = new THREE.Vector3(0, 13.5, 13.5);
+    const cameraLookAtTarget = new THREE.Vector3(0, 0, 0);
+    const currentLookAt = new THREE.Vector3(0, 0, 0);
+
+    function updateCameraStep() {
+      const cornerAngles = [Math.PI * 0.25, -Math.PI * 0.25, -Math.PI * 0.75, Math.PI * 0.75];
+      const baseAngle = cornerAngles[currentTurnIdx] + cameraOrbitAngle;
+
+      if (cameraMode === 1) {
+        // Top-Down Overview
+        cameraTargetPos.set(Math.sin(baseAngle) * 1.8, 19.5, Math.cos(baseAngle) * 1.8);
+        cameraLookAtTarget.set(0, 0, 0);
+      } else if (cameraMode === 2 || gameState === 'ROLLING') {
+        // Dynamic Action Zoom
+        if (gameState === 'ROLLING' || gameState === 'EVALUATING') {
+          let cx = 0, cz = 0;
+          goldPieces.forEach(gp => {
+            cx += gp.mesh.position.x * 0.25;
+            cz += gp.mesh.position.z * 0.25;
+          });
+          cameraTargetPos.set(cx + Math.sin(baseAngle) * 8.2, 8.8, cz + Math.cos(baseAngle) * 8.2);
+          cameraLookAtTarget.set(cx, 0.2, cz);
+        } else if (gameState === 'MOVING') {
+          const tokenPos = playerTokenGroups[currentTurnIdx].group.position;
+          cameraTargetPos.set(tokenPos.x + Math.sin(baseAngle) * 7.5, 7.5, tokenPos.z + Math.cos(baseAngle) * 7.5);
+          cameraLookAtTarget.copy(tokenPos);
+        } else {
+          cameraTargetPos.set(Math.sin(baseAngle) * 12.2, 11.2 + cameraPitchOffset * 5, Math.cos(baseAngle) * 12.2);
+          cameraLookAtTarget.set(0, 0, 0);
+        }
+      } else {
+        // Diagonal Overview (Default)
+        const radius = 14.2;
+        const height = 12.4 + cameraPitchOffset * 6;
+        cameraTargetPos.set(Math.sin(baseAngle) * radius, height, Math.cos(baseAngle) * radius);
+        cameraLookAtTarget.set(0, -0.3, 0);
+      }
+
+      camera.position.lerp(cameraTargetPos, 0.07);
+      currentLookAt.lerp(cameraLookAtTarget, 0.1);
+      camera.lookAt(currentLookAt);
+    }
+
+    /**************************************************************************
+     * 15. ASSIST MODES, RULES & PLAYER CONFIGURATION MODAL
+     **************************************************************************/
+    function setAssistMode(mode) {
+      gameRules.assistMode = mode;
+      const modes = ['real', 'entame', 'chaos'];
+      modes.forEach(m => {
+        const btn = document.getElementById(`assist-${m}`);
+        if (!btn) return;
+        if (m === mode) {
+          btn.className = 'px-2 py-1 rounded-lg font-bold transition bg-amber-600 text-white shadow';
+        } else {
+          btn.className = 'px-2 py-1 rounded-lg font-bold transition text-stone-400 hover:text-white';
+        }
+      });
+    }
+
+    function openConfigModal() {
+      renderModalPlayerSlots();
+      document.getElementById('config-modal').classList.remove('hidden');
+    }
+
+    function closeConfigModal() {
+      document.getElementById('config-modal').classList.add('hidden');
+    }
+
+    function renderModalPlayerSlots() {
+      const containerEl = document.getElementById('modal-player-slots');
+      if (!containerEl) return;
+
+      const charOptions = Object.values(CHARACTERS);
+      containerEl.innerHTML = players.map((p, idx) => {
+        const char = CHARACTERS[p.charId];
+        return `
+          <div class="bg-stone-800/90 border border-stone-700 rounded-2xl p-3 flex flex-col gap-2">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-black text-amber-300">P${idx + 1} (${CORNER_NAMES[idx]})</span>
+              <select onchange="changeSlotControl(${idx}, this.value)" class="bg-stone-900 border border-stone-600 rounded-lg px-2 py-1 text-xs font-bold text-white">
+                <option value="human" ${p.control === 'human' ? 'selected' : ''}>👤 人間操作</option>
+                <option value="cpu" ${p.control === 'cpu' ? 'selected' : ''}>🤖 CPU操作</option>
+                <option value="off" ${p.control === 'off' ? 'selected' : ''}>🚫 不参加 (OFF)</option>
+              </select>
+            </div>
+            <div class="flex items-center gap-2">
+              <div class="w-10 h-10 rounded-xl flex items-center justify-center text-xl shrink-0 border" style="background-color: ${char.ringColor}28; border-color: ${char.ringColor};">
+                ${char.avatar}
+              </div>
+              <select onchange="changeSlotChar(${idx}, this.value)" class="flex-1 bg-stone-900 border border-stone-600 rounded-xl px-2.5 py-1.5 text-xs font-bold text-white">
+                ${charOptions.map(c => `<option value="${c.id}" ${c.id === p.charId ? 'selected' : ''}>${c.avatar} ${c.name} — ${c.styleDesc}</option>`).join('')}
+              </select>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function changeSlotControl(slotIdx, newControl) {
+      // Ensure at least 1 active player remains
+      const activeCount = players.filter((p, i) => (i === slotIdx ? newControl : p.control) !== 'off').length;
+      if (activeCount === 0) {
+        renderModalPlayerSlots();
+        return;
+      }
+      players[slotIdx].control = newControl;
+      renderPlayerCards();
+      updateTurnUI();
+    }
+
+    function changeSlotChar(slotIdx, newCharId) {
+      players[slotIdx].charId = newCharId;
+      updatePlayerPieceAppearance(slotIdx);
+      renderModalPlayerSlots();
+      renderPlayerCards();
+      updateTurnUI();
+      speakCharacter(newCharId, 'turnStart', slotIdx);
+    }
+
+    function updateRulesFromUI() {
+      gameRules.cornerWarp = document.getElementById('rule-corner-warp').checked;
+      gameRules.onbu = document.getElementById('rule-onbu').checked;
+      gameRules.fastPromo = document.getElementById('rule-fast-promo').checked;
+      gameRules.stackBackward = document.getElementById('rule-stack-back').checked;
+
+      players.forEach((_, idx) => updatePlayerPieceAppearance(idx));
+      renderPlayerCards();
+      updateTurnUI();
+    }
+
+    function resetMatch() {
+      if (cpuThrowTimer) {
+        clearTimeout(cpuThrowTimer);
+        cpuThrowTimer = null;
+      }
+      document.getElementById('result-banner').classList.add('hidden');
+      activeResultOverlay.visible = false;
+
+      players.forEach((p, idx) => {
+        p.currentSq = START_SQUARES[idx];
+        p.laps = 0;
+        p.rankIdx = 0;
+        p.ridingOn = null;
+        p.rider = null;
+        p.skipTurn = false;
+      });
+
+      initPlayerTokens();
+      renderPlayerCards();
+      startTurn(0);
+    }
+
+    /**************************************************************************
+     * 16. VIDEO + AUDIO RECORDING STUDIO (1280x720 HD COMPOSITE CANVAS + MEDIARECORDER)
+     **************************************************************************/
+    const recCanvas = document.createElement('canvas');
+    recCanvas.width = 1280;
+    recCanvas.height = 720;
+    const recCtx = recCanvas.getContext('2d');
+
+    let mediaRecorder = null;
+    let recordedChunks = [];
+    let isRecording = false;
+    let recStartTime = 0;
+    let recTimerInterval = null;
+    let recordedClips = [];
+    let selectedClipIndex = -1;
+    let displayCaptureStream = null;
+
+    function getSupportedMimeInfo() {
+      const candidates = [
+        { mime: 'video/mp4;codecs=avc1,mp4a.40.2', ext: 'mp4', label: 'MP4 (H.264/AAC)' },
+        { mime: 'video/mp4', ext: 'mp4', label: 'MP4' },
+        { mime: 'video/webm;codecs=vp9,opus', ext: 'webm', label: 'WebM (VP9/Opus)' },
+        { mime: 'video/webm;codecs=vp8,opus', ext: 'webm', label: 'WebM (VP8/Opus)' },
+        { mime: 'video/webm', ext: 'webm', label: 'WebM' }
+      ];
+      for (const c of candidates) {
+        if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(c.mime)) {
+          return c;
+        }
+      }
+      return { mime: '', ext: 'webm', label: 'WebM' };
+    }
+
+    function drawRoundRect(ctx, x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+    }
+
+    // Draws the 3D WebGL Canvas + Broadcast HUD (Player status bar, Character speech cut-in, Roll result popup) onto recCanvas
+    function renderCompositeRecordingFrame() {
+      if (!isRecording) return;
+
+      const W = 1280;
+      const H = 720;
+      recCtx.fillStyle = '#14110e';
+      recCtx.fillRect(0, 0, W, H);
+
+      // 1. Draw the 3D WebGL viewport (aspect-ratio preserving center-crop / cover)
+      const srcCanvas = renderer.domElement;
+      const srcW = srcCanvas.width || 1280;
+      const srcH = srcCanvas.height || 720;
+      const scale = Math.max(W / srcW, H / srcH);
+      const drawW = srcW * scale;
+      const drawH = srcH * scale;
+      const offsetX = (W - drawW) / 2;
+      const offsetY = (H - drawH) / 2;
+      recCtx.drawImage(srcCanvas, offsetX, offsetY, drawW, drawH);
+
+      // 2. Top Broadcast Header Bar (4 Player Cards + REC Indicator)
+      const ranks = gameRules.fastPromo ? RANKS_FAST : RANKS_FULL;
+      const cardW = 275;
+      const cardH = 66;
+      const startX = 24;
+      const topY = 16;
+
+      players.forEach((p, idx) => {
+        const cx = startX + idx * (cardW + 12);
+        const char = CHARACTERS[p.charId];
+        const isTurn = idx === currentTurnIdx && gameState !== 'GAMEOVER';
+        const rankObj = ranks[Math.min(p.rankIdx, ranks.length - 1)];
+        const rem = (p.startSq - p.currentSq + 32) % 32 || 32;
+
+        recCtx.save();
+        drawRoundRect(recCtx, cx, topY, cardW, cardH, 14);
+        recCtx.fillStyle = isTurn ? 'rgba(69, 26, 3, 0.92)' : 'rgba(24, 20, 17, 0.86)';
+        recCtx.fill();
+        recCtx.lineWidth = isTurn ? 3 : 1.5;
+        recCtx.strokeStyle = isTurn ? '#fbbf24' : 'rgba(120, 113, 108, 0.6)';
+        recCtx.stroke();
+
+        // Avatar circle
+        drawRoundRect(recCtx, cx + 10, topY + 11, 44, 44, 10);
+        recCtx.fillStyle = char.ringColor + '33';
+        recCtx.fill();
+        recCtx.font = '26px sans-serif';
+        recCtx.textAlign = 'center';
+        recCtx.textBaseline = 'middle';
+        recCtx.fillText(char.avatar, cx + 32, topY + 34);
+
+        // Name & Control tag
+        recCtx.textAlign = 'left';
+        recCtx.fillStyle = '#ffffff';
+        recCtx.font = '900 16px "M PLUS Rounded 1c", sans-serif';
+        recCtx.fillText(`P${idx + 1} ${char.name}`, cx + 62, topY + 24);
+
+        recCtx.fillStyle = '#fcd34d';
+        recCtx.font = '700 12px "M PLUS Rounded 1c", sans-serif';
+        const statusStr = p.ridingOn !== null ? `P${p.ridingOn + 1}におんぶ中` : `昇格まであと${rem}マス`;
+        recCtx.fillText(statusStr, cx + 62, topY + 46);
+
+        // Current Shogi Rank Gold Plaque
+        drawRoundRect(recCtx, cx + cardW - 64, topY + 12, 52, 42, 10);
+        recCtx.fillStyle = '#f59e0b';
+        recCtx.fill();
+        recCtx.fillStyle = '#1c1917';
+        recCtx.font = '900 18px "Noto Serif JP", serif';
+        recCtx.textAlign = 'center';
+        recCtx.fillText(rankObj.kanji, cx + cardW - 38, topY + 34);
+        recCtx.restore();
+      });
+
+      // Top-Right Watermark Badge
+      recCtx.save();
+      drawRoundRect(recCtx, W - 110, topY, 88, 34, 10);
+      recCtx.fillStyle = 'rgba(220, 38, 38, 0.9)';
+      recCtx.fill();
+      recCtx.fillStyle = '#ffffff';
+      recCtx.font = '900 13px "M PLUS Rounded 1c", sans-serif';
+      recCtx.textAlign = 'center';
+      recCtx.textBaseline = 'middle';
+      recCtx.fillText('● REC HD', W - 66, topY + 17);
+      recCtx.restore();
+
+      // 3. Center Roll Result Popup Banner (when a roll finishes)
+      if (activeResultOverlay.visible) {
+        recCtx.save();
+        const bw = 540;
+        const bh = 150;
+        const bx = (W - bw) / 2;
+        const by = (H - bh) / 2 - 20;
+
+        drawRoundRect(recCtx, bx, by, bw, bh, 24);
+        recCtx.fillStyle = 'rgba(20, 16, 12, 0.94)';
+        recCtx.fill();
+        recCtx.lineWidth = 4;
+        recCtx.strokeStyle = '#facc15';
+        recCtx.stroke();
+
+        recCtx.fillStyle = '#facc15';
+        recCtx.font = '900 16px "M PLUS Rounded 1c", sans-serif';
+        recCtx.textAlign = 'center';
+        recCtx.fillText(activeResultOverlay.badge, W / 2, by + 34);
+
+        recCtx.fillStyle = '#ffffff';
+        recCtx.font = '900 44px "Noto Serif JP", serif';
+        recCtx.fillText(activeResultOverlay.title, W / 2, by + 84);
+
+        const summaryStr = activeResultOverlay.pieces.map(p => p.label).join('  /  ');
+        recCtx.fillStyle = '#fde68a';
+        recCtx.font = '700 16px "M PLUS Rounded 1c", sans-serif';
+        recCtx.fillText(summaryStr, W / 2, by + 125);
+        recCtx.restore();
+      }
+
+      // 4. Bottom Character Speech Cut-in & Subtitle Banner
+      if (activeSpeechOverlay.visible) {
+        const char = CHARACTERS[activeSpeechOverlay.charId] || CHARACTERS.onj;
+        const sw = 920;
+        const sh = 104;
+        const sx = (W - sw) / 2;
+        const sy = H - sh - 24;
+
+        recCtx.save();
+        drawRoundRect(recCtx, sx, sy, sw, sh, 22);
+        recCtx.fillStyle = 'rgba(12, 10, 9, 0.92)';
+        recCtx.fill();
+        recCtx.lineWidth = 3.5;
+        recCtx.strokeStyle = char.ringColor;
+        recCtx.stroke();
+
+        // Avatar Box
+        drawRoundRect(recCtx, sx + 16, sy + 14, 76, 76, 18);
+        recCtx.fillStyle = char.ringColor + '33';
+        recCtx.fill();
+        recCtx.strokeStyle = char.ringColor;
+        recCtx.lineWidth = 2;
+        recCtx.stroke();
+
+        recCtx.font = '44px sans-serif';
+        recCtx.textAlign = 'center';
+        recCtx.textBaseline = 'middle';
+        recCtx.fillText(char.avatar, sx + 54, sy + 54);
+
+        // Character Name Pill
+        recCtx.textAlign = 'left';
+        recCtx.fillStyle = char.ringColor;
+        recCtx.font = '900 17px "M PLUS Rounded 1c", sans-serif';
+        recCtx.fillText(`${char.name}  (P${activeSpeechOverlay.slotIdx + 1})`, sx + 110, sy + 32);
+
+        // Bold Subtitle Text with high-contrast outline
+        recCtx.font = '900 26px "M PLUS Rounded 1c", sans-serif';
+        recCtx.strokeStyle = '#000000';
+        recCtx.lineWidth = 5;
+        const dialogueStr = `「${activeSpeechOverlay.text}」`;
+        recCtx.strokeText(dialogueStr, sx + 110, sy + 70, sw - 135);
+        recCtx.fillStyle = '#ffffff';
+        recCtx.fillText(dialogueStr, sx + 110, sy + 70, sw - 135);
+        recCtx.restore();
+      }
+    }
+
+    function toggleRecording() {
+      if (isRecording) {
+        stopRecording();
+      } else {
+        startCompositeRecording();
+      }
+    }
+
+    function startCompositeRecording() {
+      try {
+        ensureAudioCtx();
+        // Prime first frame onto recCanvas
+        isRecording = true;
+        renderCompositeRecordingFrame();
+
+        const canvasStream = recCanvas.captureStream(60);
+        const combinedTracks = [...canvasStream.getVideoTracks()];
+
+        if (mediaStreamDest && mediaStreamDest.stream) {
+          const audioTracks = mediaStreamDest.stream.getAudioTracks();
+          combinedTracks.push(...audioTracks);
+        }
+
+        const combinedStream = new MediaStream(combinedTracks);
+        const mimeInfo = getSupportedMimeInfo();
+        const options = mimeInfo.mime ? { mimeType: mimeInfo.mime, videoBitsPerSecond: 6000000 } : {};
+
+        recordedChunks = [];
+        mediaRecorder = new MediaRecorder(combinedStream, options);
+
+        mediaRecorder.ondataavailable = (ev) => {
+          if (ev.data && ev.data.size > 0) {
+            recordedChunks.push(ev.data);
+          }
+        };
+
+        mediaRecorder.onstop = () => {
+          finalizeRecordingClip(mimeInfo);
+        };
+
+        mediaRecorder.start(200);
+        recStartTime = performance.now();
+        updateRecordingButtonUI();
+
+        recTimerInterval = setInterval(() => {
+          updateRecordingButtonUI();
+        }, 500);
+      } catch (err) {
+        isRecording = false;
+        updateRecordingButtonUI();
+      }
+    }
+
+    // Alternative: Capture Tab / Screen + System Audio directly via getDisplayMedia
+    async function startTabDisplayRecording() {
+      try {
+        ensureAudioCtx();
+        displayCaptureStream = await navigator.mediaDevices.getDisplayMedia({
+          video: { displaySurface: 'browser', frameRate: 60 },
+          audio: true,
+          preferCurrentTab: true
+        });
+
+        closeRecordModal();
+
+        // Merge any Web Audio stream tracks with the display audio track if needed
+        const videoTracks = displayCaptureStream.getVideoTracks();
+        const audioTracks = displayCaptureStream.getAudioTracks();
+        if (audioTracks.length === 0 && mediaStreamDest) {
+          audioTracks.push(...mediaStreamDest.stream.getAudioTracks());
+        }
+
+        const finalStream = new MediaStream([...videoTracks, ...audioTracks]);
+        const mimeInfo = getSupportedMimeInfo();
+        const options = mimeInfo.mime ? { mimeType: mimeInfo.mime, videoBitsPerSecond: 6500000 } : {};
+
+        recordedChunks = [];
+        isRecording = true;
+        mediaRecorder = new MediaRecorder(finalStream, options);
+
+        mediaRecorder.ondataavailable = (ev) => {
+          if (ev.data && ev.data.size > 0) recordedChunks.push(ev.data);
+        };
+
+        mediaRecorder.onstop = () => {
+          if (displayCaptureStream) {
+            displayCaptureStream.getTracks().forEach(t => t.stop());
+            displayCaptureStream = null;
+          }
+          finalizeRecordingClip(mimeInfo);
+        };
+
+        // If user clicks browser's native "Stop sharing" button
+        videoTracks[0].onended = () => {
+          if (isRecording) stopRecording();
+        };
+
+        mediaRecorder.start(200);
+        recStartTime = performance.now();
+        updateRecordingButtonUI();
+        recTimerInterval = setInterval(updateRecordingButtonUI, 500);
+      } catch (e) {}
+    }
+
+    function stopRecording() {
+      if (!isRecording) return;
+      isRecording = false;
+      if (recTimerInterval) {
+        clearInterval(recTimerInterval);
+        recTimerInterval = null;
+      }
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+      }
+      updateRecordingButtonUI();
+    }
+
+    function updateRecordingButtonUI() {
+      const btn = document.getElementById('btn-record');
+      const dot = document.getElementById('rec-dot');
+      const txt = document.getElementById('rec-btn-text');
+
+      if (isRecording) {
+        const sec = Math.floor((performance.now() - recStartTime) / 1000);
+        const mm = String(Math.floor(sec / 60)).padStart(2, '0');
+        const ss = String(sec % 60).padStart(2, '0');
+        btn.className = 'bg-red-600 hover:bg-red-500 border-2 border-yellow-300 text-white px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 transition shadow-[0_0_25px_rgba(239,68,68,0.9)] animate-pulse';
+        dot.className = 'w-2.5 h-2.5 rounded-sm bg-yellow-300 inline-block';
+        txt.textContent = `録画停止 (${mm}:${ss})`;
+      } else {
+        btn.className = 'bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-500 hover:to-rose-600 border border-red-300/70 text-white px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 transition shadow-[0_0_15px_rgba(239,68,68,0.5)]';
+        dot.className = 'w-2.5 h-2.5 rounded-full bg-white inline-block';
+        txt.textContent = '録画開始';
+      }
+    }
+
+    function finalizeRecordingClip(mimeInfo) {
+      if (recordedChunks.length === 0) return;
+      const blob = new Blob(recordedChunks, { type: mimeInfo.mime || 'video/webm' });
+      const url = URL.createObjectURL(blob);
+      const durationSec = Math.max(1, Math.round((performance.now() - recStartTime) / 1000));
+      const now = new Date();
+      const timeStr = now.toTimeString().slice(0, 8);
+      const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
+      const sizeMB = (blob.size / (1024 * 1024)).toFixed(2);
+
+      const clip = {
+        id: recordedClips.length + 1,
+        title: `テイクアウト #${recordedClips.length + 1} (${timeStr})`,
+        filename: `kinkorogashi_allstars_${stamp}.${mimeInfo.ext}`,
+        url,
+        blob,
+        durationSec,
+        sizeMB,
+        formatLabel: mimeInfo.label
+      };
+
+      recordedClips.unshift(clip);
+      document.getElementById('clip-count-badge').textContent = String(recordedClips.length);
+      selectRecordedClip(0);
+      openRecordModal();
+    }
+
+    function selectRecordedClip(index) {
+      if (index < 0 || index >= recordedClips.length) return;
+      selectedClipIndex = index;
+      const clip = recordedClips[index];
+
+      const videoEl = document.getElementById('recorded-video-preview');
+      const emptyEl = document.getElementById('video-empty-state');
+      const titleEl = document.getElementById('active-clip-title');
+      const metaEl = document.getElementById('active-clip-meta');
+      const dlBtn = document.getElementById('btn-download-clip');
+      const fmtBadge = document.getElementById('rec-format-badge');
+
+      videoEl.src = clip.url;
+      videoEl.classList.remove('hidden');
+      emptyEl.classList.add('hidden');
+      videoEl.play().catch(() => {});
+
+      titleEl.textContent = `${clip.title} — ${clip.filename}`;
+      metaEl.textContent = `長さ: ${clip.durationSec}秒 / サイズ: ${clip.sizeMB} MB / 形式: ${clip.formatLabel}`;
+      fmtBadge.textContent = clip.formatLabel;
+      dlBtn.disabled = false;
+
+      renderRecordedClipsList();
+    }
+
+    function renderRecordedClipsList() {
+      const listEl = document.getElementById('recorded-clips-list');
+      if (recordedClips.length === 0) {
+        listEl.innerHTML = `<div class="text-xs text-stone-500 py-2 text-center">録画履歴なし</div>`;
+        return;
+      }
+
+      listEl.innerHTML = recordedClips.map((c, idx) => {
+        const isSel = idx === selectedClipIndex;
+        return `
+          <div onclick="selectRecordedClip(${idx})" class="flex items-center justify-between px-3 py-2 rounded-xl cursor-pointer transition ${
+            isSel ? 'bg-rose-950/80 border border-rose-500 text-white' : 'bg-stone-900 hover:bg-stone-800 border border-stone-800 text-stone-300'
+          }">
+            <div class="flex items-center gap-2 min-w-0">
+              <i class="fa-solid ${isSel ? 'fa-circle-play text-rose-400' : 'fa-video text-stone-500'}"></i>
+              <span class="text-xs font-bold truncate">${c.title}</span>
+              <span class="text-[10px] text-stone-400">(${c.durationSec}秒・${c.sizeMB}MB)</span>
+            </div>
+            <button onclick="event.stopPropagation(); triggerClipDownload(${idx});" class="text-[11px] bg-emerald-600/90 hover:bg-emerald-500 text-white font-bold px-2.5 py-1 rounded-lg shadow">
+              <i class="fa-solid fa-download mr-1"></i>保存
+            </button>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function downloadSelectedClip() {
+      if (selectedClipIndex >= 0) {
+        triggerClipDownload(selectedClipIndex);
+      }
+    }
+
+    function triggerClipDownload(idx) {
+      const clip = recordedClips[idx];
+      if (!clip) return;
+      const a = document.createElement('a');
+      a.href = clip.url;
+      a.download = clip.filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+
+    function openRecordModal() {
+      renderRecordedClipsList();
+      document.getElementById('record-modal').classList.remove('hidden');
+    }
+
+    function closeRecordModal() {
+      const videoEl = document.getElementById('recorded-video-preview');
+      if (videoEl) videoEl.pause();
+      document.getElementById('record-modal').classList.add('hidden');
+    }
+
+    /**************************************************************************
+     * 17. MAIN ANIMATION & PHYSICS LOOP + 3D LABEL PROJECTION
+     **************************************************************************/
+    function updateFloatingLabels() {
+      const halfW = window.innerWidth / 2;
+      const halfH = window.innerHeight / 2;
+
+      players.forEach((p, idx) => {
+        const token = playerTokenGroups[idx];
+        if (!token) return;
+        if (p.control === 'off') {
+          token.group.visible = false;
+          token.labelEl.style.display = 'none';
+          return;
+        }
+        token.group.visible = true;
+        token.labelEl.style.display = 'flex';
+
+        const worldPos = token.group.position.clone();
+        worldPos.y += 0.65;
+        worldPos.project(camera);
+
+        if (worldPos.z > 1) {
+          token.labelEl.style.opacity = '0';
+        } else {
+          const sx = (worldPos.x * halfW) + halfW;
+          const sy = -(worldPos.y * halfH) + halfH;
+          token.labelEl.style.opacity = '1';
+          token.labelEl.style.left = `${sx}px`;
+          token.labelEl.style.top = `${sy}px`;
+        }
+      });
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      // Step 3D Physics
+      world.step(1 / 60);
+
+      if (gameState === 'ROLLING') {
+        applyStandingAssistStep();
+      }
+
+      // Sync Gold Piece Meshes with Physics Bodies
+      let allSettled = true;
+      goldPieces.forEach((gp) => {
+        gp.mesh.position.copy(gp.body.position);
+        gp.mesh.quaternion.copy(gp.body.quaternion);
+
+        const vLen = gp.body.velocity.length();
+        const wLen = gp.body.angularVelocity.length();
+        if (vLen > 0.08 || wLen > 0.14) {
+          allSettled = false;
+        }
+      });
+
+      // Check if rolling has finished
+      if (gameState === 'ROLLING') {
+        const elapsed = performance.now() - rollStartTime;
+        if (allSettled && elapsed > 650 / gameSpeed) {
+          settleFrames++;
+        } else {
+          settleFrames = 0;
+        }
+
+        if (settleFrames > 18 || elapsed > 4600 / gameSpeed) {
+          gameState = 'EVALUATING';
+          evaluateRollResult();
+        }
+      }
+
+      updateCameraStep();
+      updateFloatingLabels();
+      renderer.render(scene, camera);
+
+      // Composite 3D WebGL + Broadcast HUD onto the 1280x720 Recording Canvas
+      if (isRecording) {
+        renderCompositeRecordingFrame();
+      }
+    }
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    window.onload = function () {
+      initPlayerTokens();
+      renderPlayerCards();
+      startTurn(0);
+      animate();
+    };
+  </script>
+</body>
+</html>
