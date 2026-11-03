@@ -12,6 +12,8 @@ Three.js と Cannon.js を駆使し、4枚の金将が盤上でぶつかり転�
 
 > インストール不要。PCおよびスマートフォンのモダンブラウザ（Chrome, Edge, Safari, Firefox等）でそのまま快適に遊べます。
 
+[![3D金ころがし ゲーム画面](screenshot.png)](https://dma-cmyk.github.io/3dkinkorogashi/)
+
 ---
 
 ## 🌟 主な機能と特徴
@@ -107,6 +109,8 @@ CPU対戦・人間プレイヤーの切り替えが可能。各キャラ固有�
 .
 ├── index.html       # メインエントリーポイント（GitHub Pages用）
 ├── 3d.html          # ソースHTML
+├── screenshot.png   # ゲーム画面スクリーンショット
+├── LICENSE          # MITライセンス
 └── README.md        # プロジェクト説明ドキュメント
 ```
 
